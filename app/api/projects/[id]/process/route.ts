@@ -1,42 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createProject, createClipsFromPOIs, updateProjectStatus, updateClip, getClip } from '@/lib/db';
-import { generatePOIs, generateFallbackPOIs } from '@/lib/api/gemini';
+import { getProject, getClipsByProject, updateClip, updateProjectStatus } from '@/lib/db';
 import { getStreetViewImage, checkStreetViewAvailability } from '@/lib/api/streetview';
 import { enhanceImage } from '@/lib/api/nanobanana';
 import { generateVideo, pollForCompletion, suggestCameraMotion } from '@/lib/api/veo';
-import type { CreateProjectRequest } from '@/types';
 
-// Background pipeline processing
-async function triggerPipelineProcessing(
-  projectId: string,
-  direction: string,
-  clipIds: string[]
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  // Process asynchronously without blocking the response
-  processClipsSequentially(projectId, direction, clipIds).catch(err => {
-    console.error('Pipeline processing error:', err);
-  });
+  const { id } = await params;
+
+  try {
+    const project = await getProject(id);
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    const clips = await getClipsByProject(id);
+    if (clips.length === 0) {
+      return NextResponse.json({ error: 'No clips found for project' }, { status: 400 });
+    }
+
+    // Start processing in background
+    processProjectPipeline(project.id, project.direction, clips.map(c => c.id));
+
+    return NextResponse.json({
+      message: 'Processing started',
+      project_id: project.id,
+      clip_count: clips.length
+    });
+  } catch (error) {
+    console.error('Error starting pipeline:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    );
+  }
 }
 
-async function processClipsSequentially(
+async function processProjectPipeline(
   projectId: string,
   direction: string,
   clipIds: string[]
 ) {
   try {
+    await updateProjectStatus(projectId, 'processing');
+
     for (const clipId of clipIds) {
       await processClip(clipId, direction);
     }
 
-    // Update project status based on clip results
-    const { getClipsByProject } = await import('@/lib/db');
+    // Check final status
     const finalClips = await getClipsByProject(projectId);
     const allFailed = finalClips.every(c => c.status === 'failed');
-    const allCompleted = finalClips.every(c => c.status === 'completed' || c.status === 'failed');
 
-    if (allCompleted) {
-      await updateProjectStatus(projectId, allFailed ? 'failed' : 'completed');
-    }
+    await updateProjectStatus(projectId, allFailed ? 'failed' : 'completed');
   } catch (error) {
     console.error(`Pipeline error for project ${projectId}:`, error);
     await updateProjectStatus(projectId, 'failed');
@@ -45,6 +63,8 @@ async function processClipsSequentially(
 
 async function processClip(clipId: string, direction: string) {
   try {
+    // Get current clip state
+    const { getClip } = await import('@/lib/db');
     let clip = await getClip(clipId);
     if (!clip) return;
 
@@ -135,82 +155,5 @@ async function processClip(clipId: string, direction: string) {
       status: 'failed',
       error_message: error instanceof Error ? error.message : 'Unknown error',
     });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body: CreateProjectRequest = await request.json();
-
-    // Validate request body
-    if (!body.location_name || !body.direction) {
-      return NextResponse.json(
-        { error: 'location_name and direction are required' },
-        { status: 400 }
-      );
-    }
-
-    if (typeof body.location_lat !== 'number' || typeof body.location_lng !== 'number') {
-      return NextResponse.json(
-        { error: 'location_lat and location_lng must be numbers' },
-        { status: 400 }
-      );
-    }
-
-    // Create the project in the database
-    const project = await createProject({
-      location_name: body.location_name,
-      location_lat: body.location_lat,
-      location_lng: body.location_lng,
-      direction: body.direction,
-    });
-
-    // Update status to processing
-    await updateProjectStatus(project.id, 'processing');
-
-    // Generate POIs using Gemini
-    let pois;
-    try {
-      pois = await generatePOIs(body.location_name, body.direction);
-    } catch (error) {
-      console.error('Failed to generate POIs with Gemini, using fallback:', error);
-      pois = generateFallbackPOIs(
-        body.location_name,
-        body.location_lat,
-        body.location_lng
-      );
-    }
-
-    // Create clips for each POI
-    const clips = await createClipsFromPOIs(project.id, pois);
-
-    // Trigger pipeline processing in background
-    triggerPipelineProcessing(project.id, body.direction, clips.map(c => c.id));
-
-    return NextResponse.json({
-      project: { ...project, status: 'processing' },
-      pois,
-      clips,
-    });
-  } catch (error) {
-    console.error('Error creating project:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function GET() {
-  try {
-    const { getAllProjects } = await import('@/lib/db');
-    const projects = await getAllProjects();
-    return NextResponse.json({ projects });
-  } catch (error) {
-    console.error('Error fetching projects:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
   }
 }
