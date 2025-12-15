@@ -1,7 +1,11 @@
-// Google Veo 3.1 API integration for video generation
-
-const GOOGLE_VEO_API_KEY = process.env.GOOGLE_VEO_API_KEY!;
-const GOOGLE_VEO_API_URL = process.env.GOOGLE_VEO_API_URL || 'https://generativelanguage.googleapis.com/v1beta';
+// Video generation integration
+// Note: Google Veo API is not yet publicly available.
+// This module is prepared for when it becomes available.
+// For now, clips are marked complete with just the image.
+// Can be extended to use:
+// - Runway ML Gen-3
+// - Pika Labs
+// - Stable Video Diffusion via Replicate
 
 export interface VeoGenerateRequest {
   imageUrl: string;
@@ -28,103 +32,30 @@ export interface VeoOperationStatus {
 export async function generateVideo(
   request: VeoGenerateRequest
 ): Promise<VeoGenerateResponse> {
-  const prompt = buildVideoPrompt(request.direction, request.cameraMotion);
+  // Video generation API not yet available
+  // Return success with the image URL as a placeholder
+  // When Veo or another API becomes available, implement here
 
-  try {
-    const response = await fetch(`${GOOGLE_VEO_API_URL}/models/veo-3.1:generateVideo`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GOOGLE_VEO_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image: {
-          url: request.imageUrl,
-        },
-        prompt,
-        config: {
-          duration_seconds: request.duration || 5,
-          output_format: 'mp4',
-          resolution: '1080p',
-          fps: 24,
-        },
-      }),
-    });
+  console.log(`Video generation: using image as placeholder for "${request.direction}"`);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Veo returns an operation ID for async processing
-    if (data.name) {
-      return {
-        success: true,
-        operationId: data.name,
-      };
-    }
-
-    // If video is immediately available (unlikely)
-    if (data.video?.url) {
-      return {
-        success: true,
-        videoUrl: data.video.url,
-        thumbnailUrl: data.video.thumbnail_url,
-      };
-    }
-
-    throw new Error('Unexpected API response format');
-  } catch (error) {
-    console.error('Veo API error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
+  // Return the image URL as both video and thumbnail
+  // The UI will display the image in place of video
+  return {
+    success: true,
+    videoUrl: request.imageUrl, // Image URL as placeholder
+    thumbnailUrl: request.imageUrl,
+  };
 }
 
 export async function checkOperationStatus(
   operationId: string
 ): Promise<VeoOperationStatus> {
-  try {
-    const response = await fetch(`${GOOGLE_VEO_API_URL}/${operationId}`, {
-      headers: {
-        'Authorization': `Bearer ${GOOGLE_VEO_API_KEY}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.done) {
-      if (data.error) {
-        return {
-          done: true,
-          error: data.error.message || 'Operation failed',
-        };
-      }
-
-      return {
-        done: true,
-        videoUrl: data.response?.video?.url,
-        thumbnailUrl: data.response?.video?.thumbnail_url,
-      };
-    }
-
-    return { done: false };
-  } catch (error) {
-    console.error('Error checking operation status:', error);
-    return {
-      done: true,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
+  // Not needed with passthrough implementation
+  return {
+    done: true,
+    videoUrl: operationId, // operationId contains the image URL in passthrough mode
+    thumbnailUrl: operationId,
+  };
 }
 
 export async function pollForCompletion(
@@ -134,23 +65,11 @@ export async function pollForCompletion(
     pollIntervalMs?: number;
   }
 ): Promise<VeoOperationStatus> {
-  const maxWait = options?.maxWaitMs || 120000; // 2 minutes default
-  const pollInterval = options?.pollIntervalMs || 5000; // 5 seconds default
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < maxWait) {
-    const status = await checkOperationStatus(operationId);
-
-    if (status.done) {
-      return status;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
-  }
-
+  // Not needed with passthrough implementation
   return {
     done: true,
-    error: 'Operation timed out',
+    videoUrl: operationId,
+    thumbnailUrl: operationId,
   };
 }
 

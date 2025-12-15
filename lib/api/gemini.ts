@@ -3,21 +3,31 @@ import type { POI } from '@/types';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
 
-const POI_GENERATION_PROMPT = `Given the location "{location}" and the creative direction "{direction}", identify 8-12 specific points of interest that would provide excellent cinematic b-roll opportunities. Consider:
-- Iconic landmarks and architecture
-- Natural features (coastlines, parks, vistas)
-- Street-level atmosphere (markets, neighborhoods, transit)
-- Time-of-day relevance based on direction
+const POI_GENERATION_PROMPT = `You are a location scout identifying filming locations. Given the location "{location}" and the creative direction "{direction}", identify 8-12 specific points of interest for cinematic b-roll footage.
 
-IMPORTANT: Return ONLY a valid JSON array with no additional text, markdown formatting, or code blocks. Each object must have exactly these fields:
-- name: string (the name of the point of interest)
-- description: string (brief description of why this location is visually interesting)
-- lat: number (latitude coordinate, must be a valid number)
-- lng: number (longitude coordinate, must be a valid number)
-- relevanceReason: string (why this POI matches the creative direction)
+CRITICAL REQUIREMENTS FOR COORDINATES:
+1. Use EXACT, REAL coordinates for well-known landmarks - do NOT estimate or approximate
+2. Only include locations that have Google Street View coverage (public roads and paths)
+3. Prefer famous landmarks, main streets, public squares, and tourist areas where Street View exists
+4. Double-check that coordinates point to the ACTUAL location, not nearby areas
 
-Example response format:
-[{"name":"Golden Gate Bridge","description":"Iconic suspension bridge with stunning views","lat":37.8199,"lng":-122.4783,"relevanceReason":"Perfect for sweeping drone shots and golden hour cinematography"}]`;
+Location types to consider:
+- Famous landmarks (bridges, monuments, towers, statues)
+- Main commercial streets and plazas
+- Historic buildings and architecture
+- Waterfronts, piers, and boardwalks
+- Popular parks and gardens (main entrances)
+- Transit hubs (train stations, major intersections)
+
+IMPORTANT: Return ONLY a valid JSON array with no additional text or markdown. Each object must have:
+- name: string (official name of the point of interest)
+- description: string (brief visual description)
+- lat: number (EXACT latitude to 4+ decimal places)
+- lng: number (EXACT longitude to 4+ decimal places)
+- relevanceReason: string (why this matches the creative direction)
+
+Example with REAL coordinates:
+[{"name":"Eiffel Tower","description":"Iconic iron lattice tower with panoramic city views","lat":48.8584,"lng":2.2945,"relevanceReason":"Perfect for establishing shots and golden hour cinematography"}]`;
 
 export async function generatePOIs(
   location: string,

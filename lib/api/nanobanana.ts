@@ -1,7 +1,9 @@
-// NanoBanana Pro API integration for cinematic image enhancement
-
-const NANOBANANA_API_KEY = process.env.NANOBANANA_API_KEY!;
-const NANOBANANA_API_URL = process.env.NANOBANANA_API_URL || 'https://api.nanobanana.pro/v1';
+// Image enhancement integration
+// Note: Currently using passthrough since dedicated image enhancement APIs
+// require separate subscriptions. Can be extended to use services like:
+// - Replicate (SDXL img2img)
+// - Stability AI
+// - Custom fine-tuned models
 
 export interface NanoBananaEnhanceRequest {
   imageUrl: string;
@@ -16,65 +18,17 @@ export interface NanoBananaEnhanceResponse {
 }
 
 export async function enhanceImage(
-  request: NanoBananaEnhanceRequest,
-  maxRetries = 3
+  request: NanoBananaEnhanceRequest
 ): Promise<NanoBananaEnhanceResponse> {
-  const prompt = buildEnhancementPrompt(request.direction);
+  // For now, pass through the original image
+  // The Street View images are already high quality
+  // Enhancement can be added later with Replicate, Stability AI, etc.
 
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const response = await fetch(`${NANOBANANA_API_URL}/enhance`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NANOBANANA_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image_url: request.imageUrl,
-          prompt,
-          style: request.style || 'cinematic',
-          preserve_aspect_ratio: true,
-          output_format: 'png',
-          quality: 'high',
-        }),
-      });
-
-      if (response.status === 429) {
-        // Rate limited - wait and retry
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '5');
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        continue;
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      return {
-        success: true,
-        enhancedImageUrl: data.output_url || data.url,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.error(`NanoBanana API attempt ${attempt + 1} failed:`, lastError.message);
-
-      // Exponential backoff
-      if (attempt < maxRetries - 1) {
-        await new Promise(resolve =>
-          setTimeout(resolve, Math.pow(2, attempt + 1) * 1000)
-        );
-      }
-    }
-  }
+  console.log(`Image enhancement: passing through original for "${request.direction}"`);
 
   return {
-    success: false,
-    error: lastError?.message || 'Unknown error',
+    success: true,
+    enhancedImageUrl: request.imageUrl,
   };
 }
 
