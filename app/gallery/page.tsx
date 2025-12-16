@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import type mapboxgl from 'mapbox-gl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -273,6 +274,8 @@ function MapView({
   onSelectClip: (clip: ClipWithProject) => void;
 }) {
   const [mapLoaded, setMapLoaded] = useState(false);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
 
   useEffect(() => {
     // Inject Mapbox CSS via link tag
@@ -292,6 +295,12 @@ function MapView({
 
         mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
+        // Clean up existing map
+        if (mapRef.current) {
+          markersRef.current.forEach(m => m.remove());
+          mapRef.current.remove();
+        }
+
         const map = new mapboxgl.Map({
           container: 'map',
           style: 'mapbox://styles/mapbox/dark-v11',
@@ -299,41 +308,98 @@ function MapView({
           zoom: clips.length > 0 ? 10 : 2,
         });
 
+        mapRef.current = map;
+        markersRef.current = [];
+
         map.addControl(new mapboxgl.NavigationControl());
 
-        // Add markers for each clip
-        clips.forEach(clip => {
-          const el = document.createElement('div');
-          el.className = 'w-8 h-8 bg-primary rounded-full flex items-center justify-center cursor-pointer shadow-lg hover:scale-110 transition-transform';
-          el.innerHTML = '<svg class="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>';
-          el.style.cssText = 'width: 32px; height: 32px; background: #f59e0b; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.3);';
+        map.on('load', () => {
+          // Add markers for each clip after map loads
+          clips.forEach(clip => {
+            // Create custom marker element
+            const el = document.createElement('div');
+            el.style.cssText = `
+              width: 32px;
+              height: 32px;
+              background: #22c55e;
+              border-radius: 50%;
+              border: 3px solid white;
+              cursor: pointer;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+              transition: transform 0.15s ease;
+            `;
 
-          el.addEventListener('click', () => {
-            onSelectClip(clip);
+            el.addEventListener('mouseenter', () => {
+              el.style.transform = 'scale(1.2)';
+            });
+            el.addEventListener('mouseleave', () => {
+              el.style.transform = 'scale(1)';
+            });
+
+            // Build popup content with thumbnail and details
+            const thumbnailUrl = clip.video_thumbnail_url || clip.nanobanana_url || clip.street_view_url;
+            const popupContent = `
+              <div style="min-width: 220px; font-family: system-ui, sans-serif;">
+                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="${clip.poi_name}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px 4px 0 0;" />` : ''}
+                <div style="padding: 12px;">
+                  <h3 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 600; color: #fff;">${clip.poi_name}</h3>
+                  ${clip.poi_description ? `<p style="margin: 0 0 8px 0; font-size: 12px; color: #aaa; line-height: 1.4;">${clip.poi_description.slice(0, 100)}${clip.poi_description.length > 100 ? '...' : ''}</p>` : ''}
+                  ${clip.project ? `<p style="margin: 0 0 8px 0; font-size: 11px; color: #888;"><strong>Location:</strong> ${clip.project.location_name}</p>` : ''}
+                  <button id="view-clip-${clip.id}" style="width: 100%; padding: 8px; background: #22c55e; color: #000; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">View Details</button>
+                </div>
+              </div>
+            `;
+
+            const popup = new mapboxgl.Popup({
+              offset: [0, -16],
+              closeButton: true,
+              maxWidth: '260px',
+            }).setHTML(popupContent);
+
+            // Add click handler for the view button after popup opens
+            popup.on('open', () => {
+              const btn = document.getElementById(`view-clip-${clip.id}`);
+              if (btn) {
+                btn.addEventListener('click', () => {
+                  onSelectClip(clip);
+                  popup.remove();
+                });
+              }
+            });
+
+            // Create marker with proper anchor
+            const marker = new mapboxgl.Marker({
+              element: el,
+              anchor: 'center',
+            })
+              .setLngLat([clip.poi_lng, clip.poi_lat])
+              .setPopup(popup)
+              .addTo(map);
+
+            markersRef.current.push(marker);
           });
 
-          new mapboxgl.Marker(el)
-            .setLngLat([clip.poi_lng, clip.poi_lat])
-            .setPopup(
-              new mapboxgl.Popup({ offset: 25 })
-                .setHTML(`<div class="p-2"><strong>${clip.poi_name}</strong></div>`)
-            )
-            .addTo(map);
+          setMapLoaded(true);
         });
 
-        setMapLoaded(true);
-
-        return () => map.remove();
       } catch (error) {
         console.error('Error loading map:', error);
       }
     };
 
     loadMap();
+
+    return () => {
+      markersRef.current.forEach(m => m.remove());
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, [clips, onSelectClip]);
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden bg-card">
+    <div className="rounded-lg border border-border overflow-hidden bg-card relative">
       <div id="map" className="w-full h-[600px]" />
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-card">

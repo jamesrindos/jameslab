@@ -3,57 +3,46 @@ import type { POI } from '@/types';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
 
-const POI_GENERATION_PROMPT = `You are a professional location scout for a high-budget film production. Your job is to identify SPECIFIC, REAL, NAMED locations in "{location}" for cinematic b-roll footage.
+const POI_GENERATION_PROMPT = `You are a meticulous location scout for a premium stock footage production. Your task is to identify exactly 4 of the BEST filming locations in "{location}".
 
 CREATIVE DIRECTION: {direction}
 
-CRITICAL REQUIREMENTS:
-1. Return ONLY real, named establishments and landmarks that actually exist
-2. Use EXACT GPS coordinates (verify these are accurate to the actual location)
-3. Include a MIX of location types for visual variety
-4. Every location must be accessible via Google Street View (public roads)
+TIME PERIOD: Modern day (present time) unless the creative direction specifies otherwise.
 
-REQUIRED LOCATION TYPES (include at least one of each that exists in the area):
-- Signature landmark or monument (the most recognizable spot)
-- Main Street / Downtown commercial district
-- Popular restaurant, cafe, or bar with outdoor presence
-- Beach, waterfront, pier, or marina (if coastal)
-- Park, garden, or nature area with scenic views
-- Historic building, church, or cultural institution
-- School, university, or library
-- Shopping center, boutique street, or local market
-- Sports facility, stadium, or recreation area
-- Scenic overlook or photo-worthy viewpoint
+YOUR SELECTION CRITERIA - Choose locations that:
+1. Are ICONIC and instantly recognizable for this area
+2. Have VERIFIED Google Street View coverage (main roads, public areas)
+3. Would look compelling in professional stock footage
+4. Represent diverse visual variety (don't pick 4 similar locations)
 
-FOR EACH LOCATION PROVIDE:
-- name: The ACTUAL business name or official landmark name (e.g., "Joe's Clam Shack", "Islip Town Beach", "St. Mary's Church")
-- description: 1-2 detailed sentences describing what makes this location visually interesting for filming. Include architectural details, atmosphere, typical activity, and best time of day to shoot.
-- lat: Exact latitude (6 decimal places)
-- lng: Exact longitude (6 decimal places)
-- relevanceReason: How this location serves the creative direction
-- category: One of: landmark, restaurant, beach, park, historic, shopping, entertainment, scenic, street, civic
+THINK CAREFULLY about each selection:
+- What is the single most famous landmark in this area?
+- What is the main commercial/downtown street?
+- Is there a notable waterfront, beach, or natural feature?
+- What historic or cultural site defines this place?
 
-EXAMPLE OUTPUT:
-[
-  {
-    "name": "Babylon Village Main Street",
-    "description": "Charming tree-lined commercial street with boutique shops, outdoor cafes, and historic storefronts. Victorian-era lampposts and flower planters create a quintessential small-town American atmosphere. Best shot during golden hour when warm light fills the street.",
-    "lat": 40.695631,
-    "lng": -73.325821,
-    "relevanceReason": "Perfect establishing shot showing local character and community life",
-    "category": "street"
-  },
-  {
-    "name": "Fire Island Lighthouse",
-    "description": "Historic 168-foot tall black and white striped lighthouse built in 1858. Surrounded by maritime forest and dunes with sweeping ocean views. The iconic structure provides dramatic silhouettes at sunrise and sunset.",
-    "lat": 40.632442,
-    "lng": -73.218768,
-    "relevanceReason": "Iconic regional landmark perfect for establishing shots and aerial reveals",
-    "category": "landmark"
-  }
-]
+COORDINATE ACCURACY IS CRITICAL:
+- Use coordinates you are CERTAIN about
+- Prefer well-known locations with easily verifiable coordinates
+- The Street View camera should be ON A PUBLIC ROAD facing the POI
 
-Return ONLY a valid JSON array with 8-12 locations. No markdown, no explanation, just the JSON array.`;
+FOR EACH OF THE 4 LOCATIONS:
+{
+  "name": "Official name (e.g., 'Central Park', 'Main Street', 'City Hall')",
+  "description": "2-3 sentences: What does it look like? What makes it visually striking? What activity happens here? Describe as if briefing a cinematographer.",
+  "lat": 40.785091,
+  "lng": -73.968285,
+  "relevanceReason": "Why this location is essential for capturing {location}",
+  "category": "landmark|restaurant|beach|park|historic|shopping|street|scenic|civic"
+}
+
+LOCATION DIVERSITY - Your 4 picks should include:
+1. The signature landmark or most recognizable spot
+2. A vibrant street scene (downtown, main street, commercial area)
+3. A natural or scenic location (waterfront, park, viewpoint)
+4. A cultural/historic site OR a local character spot (cafe district, market)
+
+Return ONLY a valid JSON array with exactly 4 locations. No markdown, no explanation.`;
 
 export async function generatePOIs(
   location: string,
@@ -63,7 +52,7 @@ export async function generatePOIs(
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = POI_GENERATION_PROMPT
-    .replace('{location}', location)
+    .replace(/{location}/g, location)
     .replace('{direction}', direction);
 
   let lastError: Error | null = null;
@@ -81,17 +70,17 @@ export async function generatePOIs(
       const pois = parseGeminiResponse(text);
 
       if (pois.length > 0) {
-        console.log(`Successfully generated ${pois.length} POIs`);
-        return pois;
+        // Limit to 4 POIs maximum
+        const limitedPois = pois.slice(0, 4);
+        console.log(`Successfully generated ${limitedPois.length} POIs`);
+        return limitedPois;
       }
 
-      // If we got an empty array, retry with stricter prompt
       throw new Error('Empty POI list returned');
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Gemini API attempt ${attempt + 1} failed:`, lastError.message);
 
-      // Exponential backoff
       if (attempt < maxRetries - 1) {
         await new Promise((resolve) =>
           setTimeout(resolve, Math.pow(2, attempt) * 1000)
@@ -104,13 +93,9 @@ export async function generatePOIs(
 }
 
 function parseGeminiResponse(text: string): POI[] {
-  // Clean up the response - remove markdown code blocks if present
   let cleanText = text.trim();
-
-  // Remove markdown code blocks
   cleanText = cleanText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
 
-  // Try to find JSON array in the text
   const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error('No JSON array found in response');
@@ -125,7 +110,6 @@ function parseGeminiResponse(text: string): POI[] {
       throw new Error('Response is not an array');
     }
 
-    // Validate and clean each POI
     const validPOIs: POI[] = [];
 
     for (const item of parsed) {
@@ -155,9 +139,9 @@ function isValidPOI(obj: unknown): obj is POI {
   return (
     typeof poi.name === 'string' &&
     poi.name.length > 0 &&
-    !poi.name.includes('Area ') && // Reject generic names
+    !poi.name.includes('Area ') &&
     typeof poi.description === 'string' &&
-    poi.description.length > 20 && // Require meaningful descriptions
+    poi.description.length > 20 &&
     typeof poi.lat === 'number' &&
     !isNaN(poi.lat) &&
     poi.lat >= -90 &&
@@ -170,30 +154,25 @@ function isValidPOI(obj: unknown): obj is POI {
   );
 }
 
-// Fallback POI generator - uses Google Places API style naming
+// Fallback POI generator - only 4 locations
 export function generateFallbackPOIs(
   locationName: string,
   lat: number,
   lng: number
 ): POI[] {
-  // These are generic but named fallbacks - should rarely be used
   const fallbackTypes = [
     { name: `${locationName} Town Center`, category: 'street', offset: { lat: 0, lng: 0 } },
-    { name: `${locationName} Main Street`, category: 'street', offset: { lat: 0.005, lng: 0.005 } },
-    { name: `${locationName} Public Park`, category: 'park', offset: { lat: -0.005, lng: 0.005 } },
-    { name: `${locationName} Waterfront`, category: 'scenic', offset: { lat: 0.008, lng: -0.005 } },
-    { name: `${locationName} Historic District`, category: 'historic', offset: { lat: -0.005, lng: -0.005 } },
-    { name: `${locationName} Shopping District`, category: 'shopping', offset: { lat: 0.003, lng: 0.008 } },
-    { name: `${locationName} Community Center`, category: 'civic', offset: { lat: -0.008, lng: 0 } },
-    { name: `${locationName} Recreation Area`, category: 'park', offset: { lat: 0, lng: -0.01 } },
+    { name: `${locationName} Main Street`, category: 'street', offset: { lat: 0.003, lng: 0.003 } },
+    { name: `${locationName} Park`, category: 'park', offset: { lat: -0.003, lng: 0.002 } },
+    { name: `${locationName} Historic District`, category: 'historic', offset: { lat: 0.002, lng: -0.003 } },
   ];
 
   return fallbackTypes.map((type) => ({
     name: type.name,
-    description: `A scenic location in ${locationName} perfect for establishing shots and capturing local atmosphere. Features characteristic architecture and community activity.`,
+    description: `A scenic location in ${locationName} featuring characteristic architecture and local atmosphere. Modern day setting with typical community activity.`,
     lat: lat + type.offset.lat,
     lng: lng + type.offset.lng,
-    relevanceReason: 'Local point of interest for b-roll footage',
+    relevanceReason: 'Key location for capturing the essence of ' + locationName,
     category: type.category,
   }));
 }

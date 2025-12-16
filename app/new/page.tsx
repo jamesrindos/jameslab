@@ -40,10 +40,8 @@ export default function NewProjectPage() {
       return;
     }
 
-    if (!direction.trim()) {
-      setError('Please provide a creative direction');
-      return;
-    }
+    // Creative direction is now optional - use default if empty
+    const finalDirection = direction.trim() || 'Modern cinematic establishing shots with natural lighting';
 
     setIsSubmitting(true);
 
@@ -57,7 +55,7 @@ export default function NewProjectPage() {
           location_name: selectedLocation.name,
           location_lat: selectedLocation.lat,
           location_lng: selectedLocation.lng,
-          direction: direction.trim(),
+          direction: finalDirection,
         }),
       });
 
@@ -111,16 +109,16 @@ export default function NewProjectPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="direction">Creative Direction</Label>
+              <Label htmlFor="direction">Creative Direction <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Textarea
                 id="direction"
                 value={direction}
                 onChange={(e) => setDirection(e.target.value)}
-                placeholder="Describe your vision... e.g., 'cinematic drone shots, golden hour lighting, coastal vibes, moody atmosphere'"
-                className="min-h-[120px] resize-none"
+                placeholder="Leave blank for modern cinematic style, or describe your vision... e.g., 'golden hour lighting, coastal vibes, moody atmosphere'"
+                className="min-h-[100px] resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Be specific about style, mood, time of day, and visual elements you want
+                Optional: specify style, mood, time of day. Defaults to modern cinematic look.
               </p>
             </div>
 
@@ -156,10 +154,10 @@ export default function NewProjectPage() {
       <div className="mt-8 p-4 rounded-lg border border-border bg-card/50">
         <h3 className="font-medium text-sm mb-2">What happens next?</h3>
         <ol className="text-sm text-muted-foreground space-y-1">
-          <li>1. AI identifies 8-12 cinematic points of interest</li>
-          <li>2. Street-level imagery is captured for each location</li>
-          <li>3. Images are enhanced with cinematic styling</li>
-          <li>4. Video clips are generated with subtle motion</li>
+          <li>1. AI identifies 4 key cinematic points of interest</li>
+          <li>2. Optimal street-level imagery is captured for each</li>
+          <li>3. Scenes are enhanced with professional staging</li>
+          <li>4. High-quality stock footage ready images are generated</li>
         </ol>
       </div>
     </div>

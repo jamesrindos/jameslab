@@ -41,7 +41,7 @@ export async function enhanceImage(
   const prompt = buildStagingPrompt(request.poiName, request.category, request.direction);
 
   try {
-    console.log(`NanoBanana: Staging scene for "${request.poiName}" (${request.category})`);
+    console.log(`NanoBanana: Enhancing "${request.poiName}" (${request.category}) - subtle enhancement mode`);
 
     // Fetch the source image and convert to base64
     const { base64, mimeType } = await fetchImageAsBase64(request.imageUrl);
@@ -107,7 +107,7 @@ export async function enhanceImage(
           const imageMime = part.inlineData.mimeType || 'image/png';
           const enhancedImageUrl = `data:${imageMime};base64,${part.inlineData.data}`;
 
-          console.log('NanoBanana: Successfully staged scene');
+          console.log('NanoBanana: Successfully enhanced image');
           return {
             success: true,
             enhancedImageUrl,
@@ -135,102 +135,58 @@ export async function enhanceImage(
 }
 
 function buildStagingPrompt(poiName: string, category?: string, direction?: string): string {
-  // Get scene-specific staging instructions based on category
-  const staging = getStagingInstructions(category);
+  // Get minimal, appropriate additions based on category
+  const peopleNote = getPeopleGuidance(category);
 
-  return `Transform this street view image of "${poiName}" into a premium stock footage frame ready for high-budget film production.
+  return `Enhance this street view photograph of "${poiName}" for professional stock footage use.
 
-SCENE STAGING REQUIREMENTS:
-${staging.people}
-${staging.activity}
-${staging.atmosphere}
+CRITICAL REQUIREMENTS - PRESERVE THE ORIGINAL:
+- Keep the EXACT same composition, perspective, and framing
+- Maintain all existing architecture, buildings, and landmarks exactly as shown
+- Preserve the original scene layout - do NOT rearrange or add structures
+- This should look like an enhanced version of the same photo, not a different scene
 
-CINEMATIC ENHANCEMENTS:
-- Apply professional color grading with rich, filmic tones
-- Add depth and dimension with subtle atmospheric haze
-- Enhance lighting to create golden hour warmth
-- Ensure 4K-quality sharpness and detail
-- Remove any watermarks, logos, or UI elements
+QUALITY ENHANCEMENTS TO APPLY:
+- Improve overall image sharpness and clarity
+- Apply subtle professional color grading (slightly richer, more cinematic tones)
+- Balance exposure and enhance dynamic range
+- Remove any Google watermarks, UI elements, or artifacts
+- Clean up any visual noise or compression artifacts
 
-CREATIVE DIRECTION: ${direction || 'Cinematic establishing shot'}
+${peopleNote}
 
-IMPORTANT:
-- Keep the location architecture and layout accurate
-- Add realistic people and activity that belong in this setting
-- Make it look like a frame from a major motion picture
-- Output should be photorealistic, not illustrated
+STYLE: ${direction || 'Modern cinematic establishing shot - present day'}
 
-Generate the enhanced, staged version of this scene.`;
+OUTPUT REQUIREMENTS:
+- Photorealistic result (NOT illustrated or AI-looking)
+- Should appear as a high-quality professional photograph
+- Modern time period aesthetic
+- Subtle enhancement only - the original scene must be clearly recognizable
+
+Enhance this image while preserving its authenticity.`;
 }
 
-function getStagingInstructions(category?: string): { people: string; activity: string; atmosphere: string } {
+function getPeopleGuidance(category?: string): string {
+  // Only suggest adding people for locations where an empty scene looks unnatural
   switch (category) {
-    case 'restaurant':
-      return {
-        people: '- Add well-dressed patrons at outdoor tables, couples and small groups',
-        activity: '- Show waitstaff serving, people enjoying meals and conversation',
-        atmosphere: '- Warm evening lighting, string lights if applicable, inviting ambiance',
-      };
-
     case 'beach':
-      return {
-        people: '- Add beachgoers spread naturally across the sand - families, couples, joggers',
-        activity: '- Show people swimming, sunbathing, walking along shoreline, children playing',
-        atmosphere: '- Golden sunset/sunrise light, gentle waves, seagulls in distance',
-      };
-
-    case 'park':
-      return {
-        people: '- Add diverse park visitors - joggers, dog walkers, families with children',
-        activity: '- Show picnics, people reading on benches, kids on playground, couples strolling',
-        atmosphere: '- Dappled sunlight through trees, lush green grass, peaceful setting',
-      };
+      return 'PEOPLE: If the beach appears empty and unnatural, you may add 2-3 distant beachgoers to make it feel lived-in. Keep them small and in the background.';
 
     case 'street':
     case 'shopping':
-      return {
-        people: '- Add shoppers with bags, pedestrians of various ages, window browsers',
-        activity: '- Show people entering shops, street musicians, outdoor cafe patrons',
-        atmosphere: '- Vibrant but not crowded, afternoon light, clean and inviting streets',
-      };
+      return 'PEOPLE: If the street appears unusually empty, you may add a few natural pedestrians at a distance. Keep the scene uncrowded and realistic.';
 
-    case 'landmark':
-    case 'historic':
-      return {
-        people: '- Add tourists taking photos, tour groups, locals walking by',
-        activity: '- Show people admiring architecture, posing for pictures, guided tours',
-        atmosphere: '- Majestic lighting that highlights architectural details, sense of grandeur',
-      };
+    case 'restaurant':
+      return 'PEOPLE: If outdoor seating is visible and empty, you may add 1-2 seated patrons. Otherwise, leave as-is.';
 
-    case 'civic':
-      return {
-        people: '- Add students, families, professionals going about their day',
-        activity: '- Show community activity - people entering buildings, outdoor gatherings',
-        atmosphere: '- Clean, welcoming civic environment with American flags if appropriate',
-      };
-
-    case 'scenic':
-      return {
-        people: '- Add a few hikers, photographers, couples enjoying the view',
-        activity: '- Show people at overlooks, taking photos, pointing at scenery',
-        atmosphere: '- Dramatic natural lighting, panoramic depth, awe-inspiring scale',
-      };
-
-    case 'entertainment':
-      return {
-        people: '- Add excited visitors, families, groups of friends',
-        activity: '- Show people at entrances, taking selfies, enjoying attractions',
-        atmosphere: '- Energetic vibe, colorful and lively, sense of fun and excitement',
-      };
+    case 'park':
+      return 'PEOPLE: Only add people if the park looks unnaturally empty. If adding, keep to 1-2 distant figures (jogger, dog walker).';
 
     default:
-      return {
-        people: '- Add a natural mix of locals and visitors appropriate to the setting',
-        activity: '- Show authentic daily life and activity for this type of location',
-        atmosphere: '- Professional cinematic lighting with warm, inviting tones',
-      };
+      return 'PEOPLE: Do NOT add people unless the scene looks unnaturally empty. When in doubt, preserve the original scene without additions.';
   }
 }
+
 
 // Batch processing for multiple images
 export async function enhanceImages(

@@ -137,10 +137,13 @@ export async function getAllClipsWithProjects(): Promise<(Clip & { project: Proj
       *,
       project:projects(*)
     `)
-    .eq('status', 'completed')
+    .in('status', ['completed', 'generating_video', 'enhancing'])
     .order('created_at', { ascending: false });
 
-  if (error) throw new Error(`Failed to get clips: ${error.message}`);
+  if (error) {
+    console.error('getAllClipsWithProjects error:', error);
+    throw new Error(`Failed to get clips: ${error.message}`);
+  }
   return data || [];
 }
 
