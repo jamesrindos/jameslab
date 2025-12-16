@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProject, getClipsByProject, updateClip, updateProjectStatus } from '@/lib/db';
-import { getStreetViewImage, checkStreetViewAvailability } from '@/lib/api/streetview';
+import { getOptimalStreetViewImage } from '@/lib/api/streetview';
 import { enhanceImage } from '@/lib/api/nanobanana';
 import { generateVideo, pollForCompletion, suggestCameraMotion } from '@/lib/api/veo';
 
@@ -68,21 +68,20 @@ async function processClip(clipId: string, direction: string) {
     let clip = await getClip(clipId);
     if (!clip) return;
 
-    // Step 1: Fetch Street View
+    console.log(`Processing clip: ${clip.poi_name} (${clip.poi_category})`);
+
+    // Step 1: Fetch optimal Street View
     if (!clip.street_view_url) {
       await updateClip(clipId, { status: 'fetching_streetview' });
 
-      const hasStreetView = await checkStreetViewAvailability(clip.poi_lat, clip.poi_lng);
+      const { url: streetViewUrl } = await getOptimalStreetViewImage(
+        clip.poi_lat,
+        clip.poi_lng,
+        clip.poi_name,
+        clip.poi_category
+      );
 
-      if (hasStreetView) {
-        const streetViewUrl = await getStreetViewImage({
-          lat: clip.poi_lat,
-          lng: clip.poi_lng,
-          heading: 0,
-          pitch: 10,
-          fov: 90,
-        });
-
+      if (streetViewUrl) {
         clip = await updateClip(clipId, { street_view_url: streetViewUrl });
       } else {
         await updateClip(clipId, {
@@ -93,13 +92,15 @@ async function processClip(clipId: string, direction: string) {
       }
     }
 
-    // Step 2: Enhance with NanoBanana
+    // Step 2: Stage scene with NanoBanana
     if (clip.street_view_url && !clip.nanobanana_url) {
       await updateClip(clipId, { status: 'enhancing' });
 
       const result = await enhanceImage({
         imageUrl: clip.street_view_url,
         direction,
+        poiName: clip.poi_name,
+        category: clip.poi_category,
       });
 
       if (result.success && result.enhancedImageUrl) {
@@ -126,19 +127,19 @@ async function processClip(clipId: string, direction: string) {
         if (result.videoUrl) {
           await updateClip(clipId, {
             video_url: result.videoUrl,
-            video_thumbnail_url: result.thumbnailUrl,
+            video_thumbnail_url: result.thumbnailUrl || clip.nanobanana_url,
             status: 'completed',
           });
         } else if (result.operationId) {
           const pollResult = await pollForCompletion(result.operationId, {
-            maxWaitMs: 180000,
-            pollIntervalMs: 5000,
+            maxWaitMs: 300000,
+            pollIntervalMs: 10000,
           });
 
           if (pollResult.videoUrl) {
             await updateClip(clipId, {
               video_url: pollResult.videoUrl,
-              video_thumbnail_url: pollResult.thumbnailUrl,
+              video_thumbnail_url: pollResult.thumbnailUrl || clip.nanobanana_url,
               status: 'completed',
             });
           } else {

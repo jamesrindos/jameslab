@@ -77,6 +77,7 @@ export async function createClipsFromPOIs(
     poi_lng: poi.lng,
     poi_description: poi.description,
     relevance_reason: poi.relevanceReason,
+    poi_category: poi.category || 'landmark',
     status: 'pending' as const,
   }));
 

@@ -28,6 +28,7 @@ export interface Clip {
   poi_lng: number;
   poi_description?: string;
   relevance_reason?: string;
+  poi_category?: string;
   street_view_url?: string;
   nanobanana_url?: string;
   video_url?: string;
@@ -37,6 +38,9 @@ export interface Clip {
   created_at: string;
 }
 
+// POI category types
+export type POICategory = 'landmark' | 'restaurant' | 'beach' | 'park' | 'historic' | 'shopping' | 'entertainment' | 'scenic' | 'street' | 'civic';
+
 // Gemini POI response structure
 export interface POI {
   name: string;
@@ -44,6 +48,7 @@ export interface POI {
   lat: number;
   lng: number;
   relevanceReason: string;
+  category?: POICategory | string;
 }
 
 export interface GeminiPOIResponse {

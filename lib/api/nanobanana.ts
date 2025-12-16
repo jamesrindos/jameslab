@@ -11,6 +11,8 @@ const NANOBANANA_MODEL = 'gemini-2.0-flash-exp-image-generation';
 export interface NanoBananaEnhanceRequest {
   imageUrl: string;
   direction: string;
+  poiName: string;
+  category?: string;
   style?: 'cinematic' | 'documentary' | 'commercial' | 'artistic';
 }
 
@@ -36,15 +38,15 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ base64: string; m
 export async function enhanceImage(
   request: NanoBananaEnhanceRequest
 ): Promise<NanoBananaEnhanceResponse> {
-  const prompt = buildEnhancementPrompt(request.direction, request.style);
+  const prompt = buildStagingPrompt(request.poiName, request.category, request.direction);
 
   try {
-    console.log(`NanoBanana: Enhancing image with style "${request.direction}"`);
+    console.log(`NanoBanana: Staging scene for "${request.poiName}" (${request.category})`);
 
     // Fetch the source image and convert to base64
     const { base64, mimeType } = await fetchImageAsBase64(request.imageUrl);
 
-    // Call Gemini Image Generation API for image editing
+    // Call Gemini Image Generation API for scene staging
     const response = await fetch(
       `${GEMINI_API_URL}/models/${NANOBANANA_MODEL}:generateContent?key=${NANOBANANA_API_KEY}`,
       {
@@ -70,7 +72,7 @@ export async function enhanceImage(
           ],
           generationConfig: {
             responseModalities: ['TEXT', 'IMAGE'],
-            temperature: 0.7,
+            temperature: 0.8,
           },
         }),
       }
@@ -105,7 +107,7 @@ export async function enhanceImage(
           const imageMime = part.inlineData.mimeType || 'image/png';
           const enhancedImageUrl = `data:${imageMime};base64,${part.inlineData.data}`;
 
-          console.log('NanoBanana: Successfully enhanced image');
+          console.log('NanoBanana: Successfully staged scene');
           return {
             success: true,
             enhancedImageUrl,
@@ -132,19 +134,102 @@ export async function enhanceImage(
   }
 }
 
-function buildEnhancementPrompt(direction: string, style?: string): string {
-  const styleGuide = style || 'cinematic';
+function buildStagingPrompt(poiName: string, category?: string, direction?: string): string {
+  // Get scene-specific staging instructions based on category
+  const staging = getStagingInstructions(category);
 
-  return `Edit this image to create a ${styleGuide} film still with the following style: ${direction}
+  return `Transform this street view image of "${poiName}" into a premium stock footage frame ready for high-budget film production.
 
-Apply these enhancements while preserving the location and composition:
-- Professional cinematic color grading
-- Enhanced contrast and dynamic range
-- Subtle atmospheric effects (soft light, depth haze)
-- Clean up any visual artifacts or watermarks
-- Maintain photorealistic quality
+SCENE STAGING REQUIREMENTS:
+${staging.people}
+${staging.activity}
+${staging.atmosphere}
 
-Output a high-quality edited version of this exact scene.`;
+CINEMATIC ENHANCEMENTS:
+- Apply professional color grading with rich, filmic tones
+- Add depth and dimension with subtle atmospheric haze
+- Enhance lighting to create golden hour warmth
+- Ensure 4K-quality sharpness and detail
+- Remove any watermarks, logos, or UI elements
+
+CREATIVE DIRECTION: ${direction || 'Cinematic establishing shot'}
+
+IMPORTANT:
+- Keep the location architecture and layout accurate
+- Add realistic people and activity that belong in this setting
+- Make it look like a frame from a major motion picture
+- Output should be photorealistic, not illustrated
+
+Generate the enhanced, staged version of this scene.`;
+}
+
+function getStagingInstructions(category?: string): { people: string; activity: string; atmosphere: string } {
+  switch (category) {
+    case 'restaurant':
+      return {
+        people: '- Add well-dressed patrons at outdoor tables, couples and small groups',
+        activity: '- Show waitstaff serving, people enjoying meals and conversation',
+        atmosphere: '- Warm evening lighting, string lights if applicable, inviting ambiance',
+      };
+
+    case 'beach':
+      return {
+        people: '- Add beachgoers spread naturally across the sand - families, couples, joggers',
+        activity: '- Show people swimming, sunbathing, walking along shoreline, children playing',
+        atmosphere: '- Golden sunset/sunrise light, gentle waves, seagulls in distance',
+      };
+
+    case 'park':
+      return {
+        people: '- Add diverse park visitors - joggers, dog walkers, families with children',
+        activity: '- Show picnics, people reading on benches, kids on playground, couples strolling',
+        atmosphere: '- Dappled sunlight through trees, lush green grass, peaceful setting',
+      };
+
+    case 'street':
+    case 'shopping':
+      return {
+        people: '- Add shoppers with bags, pedestrians of various ages, window browsers',
+        activity: '- Show people entering shops, street musicians, outdoor cafe patrons',
+        atmosphere: '- Vibrant but not crowded, afternoon light, clean and inviting streets',
+      };
+
+    case 'landmark':
+    case 'historic':
+      return {
+        people: '- Add tourists taking photos, tour groups, locals walking by',
+        activity: '- Show people admiring architecture, posing for pictures, guided tours',
+        atmosphere: '- Majestic lighting that highlights architectural details, sense of grandeur',
+      };
+
+    case 'civic':
+      return {
+        people: '- Add students, families, professionals going about their day',
+        activity: '- Show community activity - people entering buildings, outdoor gatherings',
+        atmosphere: '- Clean, welcoming civic environment with American flags if appropriate',
+      };
+
+    case 'scenic':
+      return {
+        people: '- Add a few hikers, photographers, couples enjoying the view',
+        activity: '- Show people at overlooks, taking photos, pointing at scenery',
+        atmosphere: '- Dramatic natural lighting, panoramic depth, awe-inspiring scale',
+      };
+
+    case 'entertainment':
+      return {
+        people: '- Add excited visitors, families, groups of friends',
+        activity: '- Show people at entrances, taking selfies, enjoying attractions',
+        atmosphere: '- Energetic vibe, colorful and lively, sense of fun and excitement',
+      };
+
+    default:
+      return {
+        people: '- Add a natural mix of locals and visitors appropriate to the setting',
+        activity: '- Show authentic daily life and activity for this type of location',
+        atmosphere: '- Professional cinematic lighting with warm, inviting tones',
+      };
+  }
 }
 
 // Batch processing for multiple images

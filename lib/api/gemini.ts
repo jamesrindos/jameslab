@@ -3,31 +3,57 @@ import type { POI } from '@/types';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
 
-const POI_GENERATION_PROMPT = `You are a location scout identifying filming locations. Given the location "{location}" and the creative direction "{direction}", identify 8-12 specific points of interest for cinematic b-roll footage.
+const POI_GENERATION_PROMPT = `You are a professional location scout for a high-budget film production. Your job is to identify SPECIFIC, REAL, NAMED locations in "{location}" for cinematic b-roll footage.
 
-CRITICAL REQUIREMENTS FOR COORDINATES:
-1. Use EXACT, REAL coordinates for well-known landmarks - do NOT estimate or approximate
-2. Only include locations that have Google Street View coverage (public roads and paths)
-3. Prefer famous landmarks, main streets, public squares, and tourist areas where Street View exists
-4. Double-check that coordinates point to the ACTUAL location, not nearby areas
+CREATIVE DIRECTION: {direction}
 
-Location types to consider:
-- Famous landmarks (bridges, monuments, towers, statues)
-- Main commercial streets and plazas
-- Historic buildings and architecture
-- Waterfronts, piers, and boardwalks
-- Popular parks and gardens (main entrances)
-- Transit hubs (train stations, major intersections)
+CRITICAL REQUIREMENTS:
+1. Return ONLY real, named establishments and landmarks that actually exist
+2. Use EXACT GPS coordinates (verify these are accurate to the actual location)
+3. Include a MIX of location types for visual variety
+4. Every location must be accessible via Google Street View (public roads)
 
-IMPORTANT: Return ONLY a valid JSON array with no additional text or markdown. Each object must have:
-- name: string (official name of the point of interest)
-- description: string (brief visual description)
-- lat: number (EXACT latitude to 4+ decimal places)
-- lng: number (EXACT longitude to 4+ decimal places)
-- relevanceReason: string (why this matches the creative direction)
+REQUIRED LOCATION TYPES (include at least one of each that exists in the area):
+- Signature landmark or monument (the most recognizable spot)
+- Main Street / Downtown commercial district
+- Popular restaurant, cafe, or bar with outdoor presence
+- Beach, waterfront, pier, or marina (if coastal)
+- Park, garden, or nature area with scenic views
+- Historic building, church, or cultural institution
+- School, university, or library
+- Shopping center, boutique street, or local market
+- Sports facility, stadium, or recreation area
+- Scenic overlook or photo-worthy viewpoint
 
-Example with REAL coordinates:
-[{"name":"Eiffel Tower","description":"Iconic iron lattice tower with panoramic city views","lat":48.8584,"lng":2.2945,"relevanceReason":"Perfect for establishing shots and golden hour cinematography"}]`;
+FOR EACH LOCATION PROVIDE:
+- name: The ACTUAL business name or official landmark name (e.g., "Joe's Clam Shack", "Islip Town Beach", "St. Mary's Church")
+- description: 1-2 detailed sentences describing what makes this location visually interesting for filming. Include architectural details, atmosphere, typical activity, and best time of day to shoot.
+- lat: Exact latitude (6 decimal places)
+- lng: Exact longitude (6 decimal places)
+- relevanceReason: How this location serves the creative direction
+- category: One of: landmark, restaurant, beach, park, historic, shopping, entertainment, scenic, street, civic
+
+EXAMPLE OUTPUT:
+[
+  {
+    "name": "Babylon Village Main Street",
+    "description": "Charming tree-lined commercial street with boutique shops, outdoor cafes, and historic storefronts. Victorian-era lampposts and flower planters create a quintessential small-town American atmosphere. Best shot during golden hour when warm light fills the street.",
+    "lat": 40.695631,
+    "lng": -73.325821,
+    "relevanceReason": "Perfect establishing shot showing local character and community life",
+    "category": "street"
+  },
+  {
+    "name": "Fire Island Lighthouse",
+    "description": "Historic 168-foot tall black and white striped lighthouse built in 1858. Surrounded by maritime forest and dunes with sweeping ocean views. The iconic structure provides dramatic silhouettes at sunrise and sunset.",
+    "lat": 40.632442,
+    "lng": -73.218768,
+    "relevanceReason": "Iconic regional landmark perfect for establishing shots and aerial reveals",
+    "category": "landmark"
+  }
+]
+
+Return ONLY a valid JSON array with 8-12 locations. No markdown, no explanation, just the JSON array.`;
 
 export async function generatePOIs(
   location: string,
@@ -44,14 +70,18 @@ export async function generatePOIs(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      console.log(`Gemini POI generation attempt ${attempt + 1} for "${location}"`);
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
+
+      console.log('Gemini response received, parsing...');
 
       // Try to extract JSON from the response
       const pois = parseGeminiResponse(text);
 
       if (pois.length > 0) {
+        console.log(`Successfully generated ${pois.length} POIs`);
         return pois;
       }
 
@@ -106,6 +136,7 @@ function parseGeminiResponse(text: string): POI[] {
           lat: Number(item.lat),
           lng: Number(item.lng),
           relevanceReason: String(item.relevanceReason).trim(),
+          category: String(item.category || 'landmark').trim(),
         });
       }
     }
@@ -124,7 +155,9 @@ function isValidPOI(obj: unknown): obj is POI {
   return (
     typeof poi.name === 'string' &&
     poi.name.length > 0 &&
+    !poi.name.includes('Area ') && // Reject generic names
     typeof poi.description === 'string' &&
+    poi.description.length > 20 && // Require meaningful descriptions
     typeof poi.lat === 'number' &&
     !isNaN(poi.lat) &&
     poi.lat >= -90 &&
@@ -137,29 +170,30 @@ function isValidPOI(obj: unknown): obj is POI {
   );
 }
 
-// Fallback POI generator for when Gemini fails completely
+// Fallback POI generator - uses Google Places API style naming
 export function generateFallbackPOIs(
   locationName: string,
   lat: number,
   lng: number
 ): POI[] {
-  // Generate a simple grid of points around the center
-  const offsets = [
-    { lat: 0.01, lng: 0.01 },
-    { lat: 0.01, lng: -0.01 },
-    { lat: -0.01, lng: 0.01 },
-    { lat: -0.01, lng: -0.01 },
-    { lat: 0, lng: 0.015 },
-    { lat: 0, lng: -0.015 },
-    { lat: 0.015, lng: 0 },
-    { lat: -0.015, lng: 0 },
+  // These are generic but named fallbacks - should rarely be used
+  const fallbackTypes = [
+    { name: `${locationName} Town Center`, category: 'street', offset: { lat: 0, lng: 0 } },
+    { name: `${locationName} Main Street`, category: 'street', offset: { lat: 0.005, lng: 0.005 } },
+    { name: `${locationName} Public Park`, category: 'park', offset: { lat: -0.005, lng: 0.005 } },
+    { name: `${locationName} Waterfront`, category: 'scenic', offset: { lat: 0.008, lng: -0.005 } },
+    { name: `${locationName} Historic District`, category: 'historic', offset: { lat: -0.005, lng: -0.005 } },
+    { name: `${locationName} Shopping District`, category: 'shopping', offset: { lat: 0.003, lng: 0.008 } },
+    { name: `${locationName} Community Center`, category: 'civic', offset: { lat: -0.008, lng: 0 } },
+    { name: `${locationName} Recreation Area`, category: 'park', offset: { lat: 0, lng: -0.01 } },
   ];
 
-  return offsets.map((offset, index) => ({
-    name: `${locationName} Area ${index + 1}`,
-    description: `Exploring the streets and atmosphere near ${locationName}`,
-    lat: lat + offset.lat,
-    lng: lng + offset.lng,
-    relevanceReason: 'Street-level exploration point',
+  return fallbackTypes.map((type) => ({
+    name: type.name,
+    description: `A scenic location in ${locationName} perfect for establishing shots and capturing local atmosphere. Features characteristic architecture and community activity.`,
+    lat: lat + type.offset.lat,
+    lng: lng + type.offset.lng,
+    relevanceReason: 'Local point of interest for b-roll footage',
+    category: type.category,
   }));
 }

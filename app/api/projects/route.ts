@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createProject, createClipsFromPOIs, updateProjectStatus, updateClip, getClip } from '@/lib/db';
 import { generatePOIs, generateFallbackPOIs } from '@/lib/api/gemini';
-import { getStreetViewImage, checkStreetViewAvailability } from '@/lib/api/streetview';
+import { getOptimalStreetViewImage } from '@/lib/api/streetview';
 import { enhanceImage } from '@/lib/api/nanobanana';
 import { generateVideo, pollForCompletion, suggestCameraMotion } from '@/lib/api/veo';
 import type { CreateProjectRequest } from '@/types';
@@ -48,22 +48,22 @@ async function processClip(clipId: string, direction: string) {
     let clip = await getClip(clipId);
     if (!clip) return;
 
-    // Step 1: Fetch Street View
+    console.log(`Processing clip: ${clip.poi_name} (${clip.poi_category})`);
+
+    // Step 1: Fetch optimal Street View
     if (!clip.street_view_url) {
       await updateClip(clipId, { status: 'fetching_streetview' });
 
-      const hasStreetView = await checkStreetViewAvailability(clip.poi_lat, clip.poi_lng);
+      const { url: streetViewUrl, metadata } = await getOptimalStreetViewImage(
+        clip.poi_lat,
+        clip.poi_lng,
+        clip.poi_name,
+        clip.poi_category
+      );
 
-      if (hasStreetView) {
-        const streetViewUrl = await getStreetViewImage({
-          lat: clip.poi_lat,
-          lng: clip.poi_lng,
-          heading: 0,
-          pitch: 10,
-          fov: 90,
-        });
-
+      if (streetViewUrl) {
         clip = await updateClip(clipId, { street_view_url: streetViewUrl });
+        console.log(`Street View fetched for ${clip.poi_name}`);
       } else {
         await updateClip(clipId, {
           status: 'failed',
@@ -73,20 +73,25 @@ async function processClip(clipId: string, direction: string) {
       }
     }
 
-    // Step 2: Enhance with NanoBanana
+    // Step 2: Stage scene with NanoBanana
     if (clip.street_view_url && !clip.nanobanana_url) {
       await updateClip(clipId, { status: 'enhancing' });
 
+      console.log(`NanoBanana staging scene for ${clip.poi_name}`);
       const result = await enhanceImage({
         imageUrl: clip.street_view_url,
         direction,
+        poiName: clip.poi_name,
+        category: clip.poi_category,
       });
 
       if (result.success && result.enhancedImageUrl) {
         clip = await updateClip(clipId, { nanobanana_url: result.enhancedImageUrl });
+        console.log(`NanoBanana completed for ${clip.poi_name}`);
       } else {
         // Use original as fallback
         clip = await updateClip(clipId, { nanobanana_url: clip.street_view_url });
+        console.log(`NanoBanana fallback for ${clip.poi_name}: ${result.error}`);
       }
     }
 
@@ -94,6 +99,7 @@ async function processClip(clipId: string, direction: string) {
     if (clip.nanobanana_url && !clip.video_url) {
       await updateClip(clipId, { status: 'generating_video' });
 
+      console.log(`Veo generating video for ${clip.poi_name}`);
       const cameraMotion = suggestCameraMotion(direction);
       const result = await generateVideo({
         imageUrl: clip.nanobanana_url,
@@ -104,23 +110,30 @@ async function processClip(clipId: string, direction: string) {
 
       if (result.success) {
         if (result.videoUrl) {
+          // Check if it's a real video URL or just an image fallback
+          const isVideo = !result.videoUrl.startsWith('data:image') &&
+                          !result.videoUrl.includes('streetviewpixels');
+
           await updateClip(clipId, {
             video_url: result.videoUrl,
-            video_thumbnail_url: result.thumbnailUrl,
+            video_thumbnail_url: result.thumbnailUrl || clip.nanobanana_url,
             status: 'completed',
           });
+          console.log(`Veo completed for ${clip.poi_name} (isVideo: ${isVideo})`);
         } else if (result.operationId) {
+          console.log(`Veo polling operation for ${clip.poi_name}`);
           const pollResult = await pollForCompletion(result.operationId, {
-            maxWaitMs: 180000,
-            pollIntervalMs: 5000,
+            maxWaitMs: 300000, // 5 minutes
+            pollIntervalMs: 10000, // 10 seconds
           });
 
           if (pollResult.videoUrl) {
             await updateClip(clipId, {
               video_url: pollResult.videoUrl,
-              video_thumbnail_url: pollResult.thumbnailUrl,
+              video_thumbnail_url: pollResult.thumbnailUrl || clip.nanobanana_url,
               status: 'completed',
             });
+            console.log(`Veo poll completed for ${clip.poi_name}`);
           } else {
             throw new Error(pollResult.error || 'Video generation failed');
           }
@@ -171,7 +184,9 @@ export async function POST(request: NextRequest) {
     // Generate POIs using Gemini
     let pois;
     try {
+      console.log(`Generating POIs for ${body.location_name}`);
       pois = await generatePOIs(body.location_name, body.direction);
+      console.log(`Generated ${pois.length} POIs`);
     } catch (error) {
       console.error('Failed to generate POIs with Gemini, using fallback:', error);
       pois = generateFallbackPOIs(

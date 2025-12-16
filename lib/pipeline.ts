@@ -1,6 +1,6 @@
 // Pipeline orchestration for b-roll generation
 import { updateClip, updateProjectStatus, getClip } from './db';
-import { getStreetViewImage, checkStreetViewAvailability } from './api/streetview';
+import { getOptimalStreetViewImage } from './api/streetview';
 import { enhanceImage } from './api/nanobanana';
 import { generateVideo, pollForCompletion, suggestCameraMotion } from './api/veo';
 import type { Clip, Project } from '@/types';
@@ -19,24 +19,20 @@ export async function processClip(
   let currentClip = clip;
 
   try {
-    // Step 1: Fetch Street View imagery
+    console.log(`Pipeline processing: ${clip.poi_name} (${clip.poi_category})`);
+
+    // Step 1: Fetch optimal Street View imagery
     if (!options?.skipStreetView && !currentClip.street_view_url) {
       await updateClip(clip.id, { status: 'fetching_streetview' });
 
-      const hasStreetView = await checkStreetViewAvailability(
+      const { url: streetViewUrl } = await getOptimalStreetViewImage(
         clip.poi_lat,
-        clip.poi_lng
+        clip.poi_lng,
+        clip.poi_name,
+        clip.poi_category
       );
 
-      if (hasStreetView) {
-        const streetViewUrl = await getStreetViewImage({
-          lat: clip.poi_lat,
-          lng: clip.poi_lng,
-          heading: 0, // Primary angle
-          pitch: 10,
-          fov: 90,
-        });
-
+      if (streetViewUrl) {
         currentClip = await updateClip(clip.id, {
           street_view_url: streetViewUrl,
         });
@@ -49,13 +45,15 @@ export async function processClip(
       }
     }
 
-    // Step 2: Enhance with NanoBanana
+    // Step 2: Stage scene with NanoBanana
     if (!options?.skipEnhancement && currentClip.street_view_url && !currentClip.nanobanana_url) {
       await updateClip(clip.id, { status: 'enhancing' });
 
       const enhanceResult = await enhanceImage({
         imageUrl: currentClip.street_view_url,
         direction,
+        poiName: clip.poi_name,
+        category: clip.poi_category,
       });
 
       if (enhanceResult.success && enhanceResult.enhancedImageUrl) {
@@ -90,20 +88,20 @@ export async function processClip(
           // Video immediately available
           currentClip = await updateClip(clip.id, {
             video_url: generateResult.videoUrl,
-            video_thumbnail_url: generateResult.thumbnailUrl,
+            video_thumbnail_url: generateResult.thumbnailUrl || currentClip.nanobanana_url,
             status: 'completed',
           });
         } else if (generateResult.operationId) {
           // Poll for completion
           const operationResult = await pollForCompletion(generateResult.operationId, {
-            maxWaitMs: 180000, // 3 minutes
-            pollIntervalMs: 5000,
+            maxWaitMs: 300000, // 5 minutes
+            pollIntervalMs: 10000,
           });
 
           if (operationResult.videoUrl) {
             currentClip = await updateClip(clip.id, {
               video_url: operationResult.videoUrl,
-              video_thumbnail_url: operationResult.thumbnailUrl,
+              video_thumbnail_url: operationResult.thumbnailUrl || currentClip.nanobanana_url,
               status: 'completed',
             });
           } else {
