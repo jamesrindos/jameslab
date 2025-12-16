@@ -13,7 +13,6 @@ import {
   Loader2,
   ExternalLink,
   Image as ImageIcon,
-  Video,
   Sparkles,
   Play,
   Download,
@@ -23,7 +22,7 @@ import {
 import type { Project, Clip } from '@/types';
 import { cn } from '@/lib/utils';
 
-type PipelineStage = 'poi_generation' | 'street_view' | 'enhancement' | 'video_generation' | 'complete';
+type PipelineStage = 'poi_generation' | 'street_view' | 'enhancement' | 'complete';
 
 interface ProjectData {
   project: Project;
@@ -112,9 +111,6 @@ export default function ProjectPage() {
     const allDone = clips.every(c => c.status === 'completed' || c.status === 'failed');
     if (allDone) return 'complete';
 
-    const hasVideo = clips.some(c => c.status === 'generating_video' || c.video_url);
-    if (hasVideo) return 'video_generation';
-
     const hasEnhanced = clips.some(c => c.status === 'enhancing' || c.nanobanana_url);
     if (hasEnhanced) return 'enhancement';
 
@@ -127,14 +123,13 @@ export default function ProjectPage() {
   const currentStage = getCurrentStage();
 
   const stages = [
-    { id: 'poi_generation', label: 'Identifying POIs', icon: MapPin },
-    { id: 'street_view', label: 'Fetching Street View', icon: ImageIcon },
+    { id: 'poi_generation', label: 'Discovering POIs', icon: MapPin },
+    { id: 'street_view', label: 'Capturing Street View', icon: ImageIcon },
     { id: 'enhancement', label: 'Enhancing Images', icon: Sparkles },
-    { id: 'video_generation', label: 'Generating Video', icon: Video },
   ];
 
   const getStageStatus = (stageId: string): 'pending' | 'active' | 'complete' => {
-    const stageOrder = ['poi_generation', 'street_view', 'enhancement', 'video_generation'];
+    const stageOrder = ['poi_generation', 'street_view', 'enhancement'];
     const currentIndex = stageOrder.indexOf(currentStage);
     const stageIndex = stageOrder.indexOf(stageId);
 
@@ -339,19 +334,13 @@ function ClipCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
 }
 
 function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void }) {
-  const [viewMode, setViewMode] = useState<'original' | 'enhanced' | 'video'>('video');
+  const [viewMode, setViewMode] = useState<'original' | 'enhanced'>('enhanced');
 
   const hasOriginal = !!clip.street_view_url;
   const hasEnhanced = !!clip.nanobanana_url;
-  const hasVideo = !!clip.video_url;
 
   // Default to the best available view
-  const defaultView = hasVideo ? 'video' : hasEnhanced ? 'enhanced' : 'original';
-  const currentView = viewMode === 'video' && !hasVideo
-    ? (hasEnhanced ? 'enhanced' : 'original')
-    : viewMode === 'enhanced' && !hasEnhanced
-    ? 'original'
-    : viewMode;
+  const currentView = viewMode === 'enhanced' && !hasEnhanced ? 'original' : viewMode;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -394,33 +383,11 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
               Enhanced
             </button>
           )}
-          {hasVideo && (
-            <button
-              onClick={() => setViewMode('video')}
-              className={cn(
-                "flex-1 px-4 py-3 text-sm font-medium transition-colors",
-                currentView === 'video'
-                  ? "bg-primary/10 text-primary border-b-2 border-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Video className="w-4 h-4 inline mr-2" />
-              Video
-            </button>
-          )}
         </div>
 
         {/* Content */}
         <div className="aspect-video bg-black">
-          {currentView === 'video' && clip.video_url ? (
-            <video
-              src={clip.video_url}
-              controls
-              autoPlay
-              loop
-              className="w-full h-full"
-            />
-          ) : currentView === 'enhanced' && clip.nanobanana_url ? (
+          {currentView === 'enhanced' && clip.nanobanana_url ? (
             <img
               src={clip.nanobanana_url}
               alt={`${clip.poi_name} - Enhanced`}
@@ -440,7 +407,7 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
         </div>
 
         {/* Before/After comparison */}
-        {hasOriginal && hasEnhanced && currentView !== 'video' && (
+        {hasOriginal && hasEnhanced && (
           <div className="p-4 border-t border-border bg-muted/30">
             <div className="flex items-center justify-center gap-4 text-sm">
               <span className="text-muted-foreground">Compare:</span>
@@ -489,12 +456,12 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
             </div>
           )}
 
-          {clip.video_url && (
+          {(clip.nanobanana_url || clip.street_view_url) && (
             <div className="mt-4">
-              <a href={clip.video_url} download className="inline-flex">
+              <a href={clip.nanobanana_url || clip.street_view_url} download className="inline-flex">
                 <Button className="gap-2">
                   <Download className="w-4 h-4" />
-                  Download Video
+                  Download Image
                 </Button>
               </a>
             </div>
