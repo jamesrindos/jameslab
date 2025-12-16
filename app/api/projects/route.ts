@@ -132,12 +132,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the project in the database
-    const project = await createProject({
-      location_name: body.location_name,
-      location_lat: body.location_lat,
-      location_lng: body.location_lng,
-      direction: body.direction,
-    });
+    let project;
+    try {
+      project = await createProject({
+        location_name: body.location_name,
+        location_lat: body.location_lat,
+        location_lng: body.location_lng,
+        direction: body.direction,
+      });
+    } catch (dbError) {
+      console.error('Database error creating project:', dbError);
+      const errorMsg = dbError instanceof Error ? dbError.message : String(dbError);
+      // Check for common infrastructure errors
+      if (errorMsg.includes('<!DOCTYPE') || errorMsg.includes('522') || errorMsg.includes('timeout')) {
+        return NextResponse.json(
+          { error: 'Database temporarily unavailable. Please try again in a moment.' },
+          { status: 503 }
+        );
+      }
+      throw dbError;
+    }
 
     // Update status to processing
     await updateProjectStatus(project.id, 'processing');
@@ -177,8 +191,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating project:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    // Clean up HTML error responses from infrastructure issues
+    if (errorMsg.includes('<!DOCTYPE') || errorMsg.includes('522') || errorMsg.includes('Connection timed out')) {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable. Please try again in a moment.' },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: errorMsg.length > 200 ? 'An unexpected error occurred' : errorMsg },
       { status: 500 }
     );
   }
