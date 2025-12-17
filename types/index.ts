@@ -12,6 +12,7 @@ export type ClipStatus = 'pending' | 'fetching_streetview' | 'enhancing' | 'gene
 export interface Project {
   id: string;
   user_id?: string;
+  name?: string;
   location_name: string;
   location_lat: number;
   location_lng: number;
@@ -93,6 +94,7 @@ export interface StreetViewParams {
 
 // API Request/Response types
 export interface CreateProjectRequest {
+  name?: string;
   location_name: string;
   location_lat: number;
   location_lng: number;

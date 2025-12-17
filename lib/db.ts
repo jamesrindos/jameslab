@@ -8,6 +8,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Project operations
 export async function createProject(data: {
+  name?: string;
   location_name: string;
   location_lat: number;
   location_lng: number;
@@ -16,6 +17,7 @@ export async function createProject(data: {
   const { data: project, error } = await supabase
     .from('projects')
     .insert({
+      name: data.name || data.location_name,
       location_name: data.location_name,
       location_lat: data.location_lat,
       location_lng: data.location_lng,
@@ -133,18 +135,35 @@ export async function getClip(id: string): Promise<Clip | null> {
 }
 
 export async function getAllClipsWithProjects(): Promise<(Clip & { project: Project })[]> {
+  // Get clips that have any visual content (regardless of status)
+  // This ensures we show clips even if status tracking has issues
   const { data, error } = await supabase
     .from('clips')
     .select(`
       *,
       project:projects(*)
     `)
-    .in('status', ['completed', 'generating_video', 'enhancing'])
+    .or('nanobanana_url.neq.,place_photo_url.neq.,video_url.neq.,street_view_url.neq.')
     .order('created_at', { ascending: false });
 
   if (error) {
     console.error('getAllClipsWithProjects error:', error);
-    throw new Error(`Failed to get clips: ${error.message}`);
+    // Try a simpler query as fallback
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('clips')
+      .select(`
+        *,
+        project:projects(*)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (fallbackError) {
+      throw new Error(`Failed to get clips: ${fallbackError.message}`);
+    }
+    // Filter client-side to clips with content
+    return (fallbackData || []).filter(clip =>
+      clip.nanobanana_url || clip.place_photo_url || clip.video_url || clip.street_view_url
+    );
   }
   return data || [];
 }

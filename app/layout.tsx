@@ -38,16 +38,22 @@ export default function RootLayout({
               </a>
               <div className="flex items-center gap-4">
                 <a
-                  href="/new"
+                  href="/"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  New Project
+                  Projects
                 </a>
                 <a
                   href="/gallery"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Gallery
+                </a>
+                <a
+                  href="/new"
+                  className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  + New
                 </a>
               </div>
             </div>

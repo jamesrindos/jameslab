@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import {
   MapPin,
   CheckCircle2,
@@ -19,10 +20,20 @@ import {
   ArrowRight,
   X,
   RefreshCw,
-  Send
+  Send,
+  Plus,
+  Home
 } from 'lucide-react';
 import type { Project, Clip } from '@/types';
 import { cn } from '@/lib/utils';
+
+interface SelectedLocation {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  lat: number;
+  lng: number;
+}
 
 type PipelineStage = 'poi_generation' | 'street_view' | 'enhancement' | 'complete';
 
@@ -39,6 +50,13 @@ export default function ProjectPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
+
+  // Add to project state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addLocationInput, setAddLocationInput] = useState('');
+  const [selectedAddLocation, setSelectedAddLocation] = useState<SelectedLocation | null>(null);
+  const [isAddingClips, setIsAddingClips] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -65,6 +83,43 @@ export default function ProjectPage() {
       return () => clearInterval(interval);
     }
   }, [projectId]);
+
+  const handleAddClips = async () => {
+    if (!selectedAddLocation) {
+      setAddError('Please select a location');
+      return;
+    }
+
+    setIsAddingClips(true);
+    setAddError(null);
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/add-clips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_name: selectedAddLocation.name,
+          location_lat: selectedAddLocation.lat,
+          location_lng: selectedAddLocation.lng,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to add clips');
+      }
+
+      // Reset and close modal
+      setShowAddModal(false);
+      setAddLocationInput('');
+      setSelectedAddLocation(null);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setIsAddingClips(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -146,11 +201,27 @@ export default function ProjectPage() {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <MapPin className="w-4 h-4" />
-          {project.location_name}
+          <a href="/" className="hover:text-foreground transition-colors flex items-center gap-1">
+            <Home className="w-3 h-3" />
+            Projects
+          </a>
+          <span>/</span>
+          <span>{project.name || project.location_name}</span>
         </div>
-        <h1 className="text-3xl font-bold mb-2">Project Progress</h1>
-        <p className="text-muted-foreground">{project.direction}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">{project.name || project.location_name}</h1>
+            <p className="text-muted-foreground">{project.direction}</p>
+          </div>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="gap-2"
+            disabled={project.status === 'processing'}
+          >
+            <Plus className="w-4 h-4" />
+            Add to Project
+          </Button>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8">
@@ -285,6 +356,88 @@ export default function ProjectPage() {
           clip={selectedClip}
           onClose={() => setSelectedClip(null)}
         />
+      )}
+
+      {/* Add to Project Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80"
+            onClick={() => !isAddingClips && setShowAddModal(false)}
+          />
+          <div className="relative bg-card rounded-lg max-w-lg w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Add to Project</h2>
+                <button
+                  onClick={() => !isAddingClips && setShowAddModal(false)}
+                  className="p-2 rounded-full hover:bg-muted"
+                  disabled={isAddingClips}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-muted-foreground text-sm mb-4">
+                Search for a new location to add cinematic clips to this project.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Location</label>
+                  <LocationAutocomplete
+                    value={addLocationInput}
+                    onChange={setAddLocationInput}
+                    onSelect={(location) => {
+                      setSelectedAddLocation(location);
+                      setAddError(null);
+                    }}
+                    placeholder="Search for a city or landmark..."
+                  />
+                  {selectedAddLocation && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Selected: {selectedAddLocation.formatted_address}
+                    </p>
+                  )}
+                </div>
+
+                {addError && (
+                  <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 px-4 py-3 rounded-md">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {addError}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    onClick={handleAddClips}
+                    disabled={!selectedAddLocation || isAddingClips}
+                    className="flex-1 gap-2"
+                  >
+                    {isAddingClips ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Adding Clips...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Add Clips
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddModal(false)}
+                    disabled={isAddingClips}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

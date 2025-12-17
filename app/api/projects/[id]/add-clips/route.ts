@@ -1,33 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createProject, createClipsFromPOIs, updateProjectStatus, updateClip, getClip } from '@/lib/db';
+import { getProject, createClipsFromPOIs, updateClip, getClip, updateProjectStatus } from '@/lib/db';
 import { discoverRealPOIs, getPlacePhotoUrl } from '@/lib/api/places-poi';
 import { getOptimalStreetViewImage } from '@/lib/api/streetview';
 import { enhanceImage } from '@/lib/api/nanobanana';
-import type { CreateProjectRequest } from '@/types';
 
-// Background pipeline processing - NO Veo, focus on quality images
-async function triggerPipelineProcessing(
-  projectId: string,
-  direction: string,
-  clipIds: string[]
-) {
-  // Process asynchronously without blocking the response
-  processClipsSequentially(projectId, direction, clipIds).catch(err => {
-    console.error('Pipeline processing error:', err);
-  });
-}
-
-async function processClipsSequentially(
+// Background pipeline processing for new clips
+async function processNewClips(
   projectId: string,
   direction: string,
   clipIds: string[]
 ) {
   try {
+    // Set project to processing while we add new clips
+    await updateProjectStatus(projectId, 'processing');
+
     for (const clipId of clipIds) {
       await processClip(clipId, direction);
     }
 
-    // Update project status based on clip results
+    // Check final status
     const { getClipsByProject } = await import('@/lib/db');
     const finalClips = await getClipsByProject(projectId);
     const allFailed = finalClips.every(c => c.status === 'failed');
@@ -115,7 +106,6 @@ async function processClip(clipId: string, direction: string) {
     }
 
     // Step 3: Mark as completed
-    // Use the best available image as the final output
     const finalImageUrl = clip.nanobanana_url || clip.place_photo_url || clip.street_view_url;
     await updateClip(clipId, {
       video_url: finalImageUrl,
@@ -133,62 +123,43 @@ async function processClip(clipId: string, direction: string) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const body: CreateProjectRequest = await request.json();
+    const { id } = await params;
+    const body = await request.json();
 
-    // Validate request body
-    if (!body.location_name || !body.direction) {
+    const { location_name, location_lat, location_lng } = body;
+
+    if (!location_name || typeof location_lat !== 'number' || typeof location_lng !== 'number') {
       return NextResponse.json(
-        { error: 'location_name and direction are required' },
+        { error: 'location_name, location_lat, and location_lng are required' },
         { status: 400 }
       );
     }
 
-    if (typeof body.location_lat !== 'number' || typeof body.location_lng !== 'number') {
+    // Verify project exists
+    const project = await getProject(id);
+    if (!project) {
       return NextResponse.json(
-        { error: 'location_lat and location_lng must be numbers' },
-        { status: 400 }
+        { error: 'Project not found' },
+        { status: 404 }
       );
     }
 
-    // Create the project in the database
-    let project;
-    try {
-      project = await createProject({
-        name: body.name,
-        location_name: body.location_name,
-        location_lat: body.location_lat,
-        location_lng: body.location_lng,
-        direction: body.direction,
-      });
-    } catch (dbError) {
-      console.error('Database error creating project:', dbError);
-      const errorMsg = dbError instanceof Error ? dbError.message : String(dbError);
-      // Check for common infrastructure errors
-      if (errorMsg.includes('<!DOCTYPE') || errorMsg.includes('522') || errorMsg.includes('timeout')) {
-        return NextResponse.json(
-          { error: 'Database temporarily unavailable. Please try again in a moment.' },
-          { status: 503 }
-        );
-      }
-      throw dbError;
-    }
+    console.log(`Adding new clips to project ${project.name || project.location_name} from ${location_name}`);
 
-    // Update status to processing
-    await updateProjectStatus(project.id, 'processing');
-
-    // Discover REAL POIs using Google Places API
-    console.log(`Discovering real POIs for ${body.location_name}`);
+    // Discover POIs for the new location
     const realPOIs = await discoverRealPOIs(
-      body.location_name,
-      body.location_lat,
-      body.location_lng,
-      4 // Get exactly 4 POIs
+      location_name,
+      location_lat,
+      location_lng,
+      4 // Get 4 POIs
     );
 
-    console.log(`Discovered ${realPOIs.length} real POIs:`);
-    realPOIs.forEach(poi => console.log(`  - ${poi.name} (${poi.category})`));
+    console.log(`Discovered ${realPOIs.length} POIs for ${location_name}`);
 
     // Convert to the POI format expected by createClipsFromPOIs
     const pois = realPOIs.map(poi => ({
@@ -202,60 +173,23 @@ export async function POST(request: NextRequest) {
       photoReference: poi.photoReference,
     }));
 
-    // Create clips for each POI
-    const clips = await createClipsFromPOIs(project.id, pois);
+    // Create new clips for this project
+    const clips = await createClipsFromPOIs(id, pois);
 
-    // Trigger pipeline processing in background
-    triggerPipelineProcessing(project.id, body.direction, clips.map(c => c.id));
+    // Process the new clips in the background
+    processNewClips(id, project.direction, clips.map(c => c.id)).catch(err => {
+      console.error('Error processing new clips:', err);
+    });
 
     return NextResponse.json({
-      project: { ...project, status: 'processing' },
-      pois,
+      success: true,
       clips,
+      message: `Added ${clips.length} new clips from ${location_name}`,
     });
   } catch (error) {
-    console.error('Error creating project:', error);
-    const errorMsg = error instanceof Error ? error.message : String(error);
-
-    // Clean up HTML error responses from infrastructure issues
-    if (errorMsg.includes('<!DOCTYPE') || errorMsg.includes('522') || errorMsg.includes('Connection timed out')) {
-      return NextResponse.json(
-        { error: 'Service temporarily unavailable. Please try again in a moment.' },
-        { status: 503 }
-      );
-    }
-
+    console.error('Error adding clips to project:', error);
     return NextResponse.json(
-      { error: errorMsg.length > 200 ? 'An unexpected error occurred' : errorMsg },
-      { status: 500 }
-    );
-  }
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const includeClips = searchParams.get('include') === 'clips';
-
-    const { getAllProjects, getClipsByProject } = await import('@/lib/db');
-    const projects = await getAllProjects();
-
-    if (includeClips) {
-      // Fetch clips for each project
-      const projectsWithClips = await Promise.all(
-        projects.map(async (project) => {
-          const clips = await getClipsByProject(project.id);
-          return { ...project, clips };
-        })
-      );
-      return NextResponse.json({ projects: projectsWithClips });
-    }
-
-    return NextResponse.json({ projects });
-  } catch (error) {
-    console.error('Error fetching projects:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }

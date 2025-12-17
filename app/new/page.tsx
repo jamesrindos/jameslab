@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
@@ -20,6 +21,7 @@ interface SelectedLocation {
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const [projectName, setProjectName] = useState('');
   const [locationInput, setLocationInput] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
   const [direction, setDirection] = useState('');
@@ -28,6 +30,10 @@ export default function NewProjectPage() {
 
   const handleLocationSelect = (location: SelectedLocation) => {
     setSelectedLocation(location);
+    // Auto-fill project name with location if not already set
+    if (!projectName.trim()) {
+      setProjectName(location.name);
+    }
     setError(null);
   };
 
@@ -42,6 +48,8 @@ export default function NewProjectPage() {
 
     // Creative direction is now optional - use default if empty
     const finalDirection = direction.trim() || 'Modern cinematic establishing shots with natural lighting';
+    // Use location name as project name if not provided
+    const finalName = projectName.trim() || selectedLocation.name;
 
     setIsSubmitting(true);
 
@@ -52,6 +60,7 @@ export default function NewProjectPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          name: finalName,
           location_name: selectedLocation.name,
           location_lat: selectedLocation.lat,
           location_lng: selectedLocation.lng,
@@ -93,6 +102,19 @@ export default function NewProjectPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="projectName">Project Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                id="projectName"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="My Project"
+              />
+              <p className="text-xs text-muted-foreground">
+                Give your project a name, or leave blank to use the location name
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="location">Location</Label>
               <LocationAutocomplete
