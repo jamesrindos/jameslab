@@ -289,7 +289,7 @@ export default function ProjectPage() {
 }
 
 function ClipCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
-  const previewUrl = clip.video_thumbnail_url || clip.nanobanana_url || clip.street_view_url;
+  const previewUrl = clip.video_thumbnail_url || clip.nanobanana_url || clip.place_photo_url || clip.street_view_url;
 
   return (
     <div
@@ -336,7 +336,9 @@ function ClipCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
 function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void }) {
   const [viewMode, setViewMode] = useState<'original' | 'enhanced'>('enhanced');
 
-  const hasOriginal = !!clip.street_view_url;
+  // Original can be either Place Photo or Street View
+  const originalUrl = clip.place_photo_url || clip.street_view_url;
+  const hasOriginal = !!originalUrl;
   const hasEnhanced = !!clip.nanobanana_url;
 
   // Default to the best available view
@@ -393,9 +395,9 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
               alt={`${clip.poi_name} - Enhanced`}
               className="w-full h-full object-contain"
             />
-          ) : clip.street_view_url ? (
+          ) : originalUrl ? (
             <img
-              src={clip.street_view_url}
+              src={originalUrl}
               alt={`${clip.poi_name} - Original`}
               className="w-full h-full object-contain"
             />
@@ -456,9 +458,9 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
             </div>
           )}
 
-          {(clip.nanobanana_url || clip.street_view_url) && (
+          {(clip.nanobanana_url || clip.place_photo_url || clip.street_view_url) && (
             <div className="mt-4">
-              <a href={clip.nanobanana_url || clip.street_view_url} download className="inline-flex">
+              <a href={clip.nanobanana_url || clip.place_photo_url || clip.street_view_url} download className="inline-flex">
                 <Button className="gap-2">
                   <Download className="w-4 h-4" />
                   Download Image

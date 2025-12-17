@@ -15,6 +15,59 @@ export interface RealPOI {
   photoReference?: string;
 }
 
+// Fetch a Place Photo using the photo_reference
+// Returns a high-quality image URL of the actual location
+export async function getPlacePhotoUrl(
+  photoReference: string,
+  maxWidth: number = 1200
+): Promise<string | null> {
+  // The Places Photo API returns a redirect to the actual image
+  // We construct the URL that will redirect to the photo
+  const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photo_reference=${photoReference}&key=${PLACES_API_KEY}`;
+
+  try {
+    // Fetch to get the redirected URL (the actual image URL)
+    const response = await fetch(url, { redirect: 'follow' });
+    if (response.ok) {
+      // Return the final URL after redirect
+      return response.url;
+    }
+    console.error('Place Photo API error:', response.status);
+    return null;
+  } catch (error) {
+    console.error('Error fetching place photo:', error);
+    return null;
+  }
+}
+
+// Get multiple photo references for a place (for variety)
+export async function getPlacePhotos(
+  placeId: string,
+  maxPhotos: number = 3
+): Promise<string[]> {
+  const url = new URL('https://maps.googleapis.com/maps/api/place/details/json');
+  url.searchParams.set('place_id', placeId);
+  url.searchParams.set('fields', 'photos');
+  url.searchParams.set('key', PLACES_API_KEY);
+
+  try {
+    const response = await fetch(url.toString());
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.result?.photos) {
+      return [];
+    }
+
+    // Return up to maxPhotos photo references
+    return data.result.photos
+      .slice(0, maxPhotos)
+      .map((p: { photo_reference: string }) => p.photo_reference);
+  } catch (error) {
+    console.error('Error fetching place photos:', error);
+    return [];
+  }
+}
+
 // Place types to search for, in priority order
 const POI_SEARCH_TYPES = [
   { type: 'tourist_attraction', category: 'landmark', priority: 1 },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createProject, createClipsFromPOIs, updateProjectStatus, updateClip, getClip } from '@/lib/db';
-import { discoverRealPOIs } from '@/lib/api/places-poi';
+import { discoverRealPOIs, getPlacePhotoUrl } from '@/lib/api/places-poi';
 import { getOptimalStreetViewImage } from '@/lib/api/streetview';
 import { enhanceImage } from '@/lib/api/nanobanana';
 import type { CreateProjectRequest } from '@/types';
@@ -49,10 +49,25 @@ async function processClip(clipId: string, direction: string) {
 
     console.log(`Processing clip: ${clip.poi_name} (${clip.poi_category})`);
 
-    // Step 1: Fetch optimal Street View
-    if (!clip.street_view_url) {
-      await updateClip(clipId, { status: 'fetching_streetview' });
+    // Step 1: Get primary image - prefer Place Photo over Street View
+    let primaryImageUrl: string | null = null;
 
+    await updateClip(clipId, { status: 'fetching_streetview' });
+
+    // Try Place Photo first (curated images of the actual location)
+    if (clip.photo_reference) {
+      console.log(`Fetching Place Photo for ${clip.poi_name}...`);
+      const placePhotoUrl = await getPlacePhotoUrl(clip.photo_reference, 1200);
+      if (placePhotoUrl) {
+        primaryImageUrl = placePhotoUrl;
+        clip = await updateClip(clipId, { place_photo_url: placePhotoUrl });
+        console.log(`Place Photo fetched for ${clip.poi_name}`);
+      }
+    }
+
+    // Fall back to Street View if no Place Photo
+    if (!primaryImageUrl) {
+      console.log(`No Place Photo, trying Street View for ${clip.poi_name}...`);
       const { url: streetViewUrl } = await getOptimalStreetViewImage(
         clip.poi_lat,
         clip.poi_lng,
@@ -61,24 +76,29 @@ async function processClip(clipId: string, direction: string) {
       );
 
       if (streetViewUrl) {
+        primaryImageUrl = streetViewUrl;
         clip = await updateClip(clipId, { street_view_url: streetViewUrl });
         console.log(`Street View fetched for ${clip.poi_name}`);
-      } else {
-        await updateClip(clipId, {
-          status: 'failed',
-          error_message: 'No Street View coverage available',
-        });
-        return;
       }
     }
 
+    // If we still don't have an image, fail
+    if (!primaryImageUrl) {
+      await updateClip(clipId, {
+        status: 'failed',
+        error_message: 'No imagery available for this location',
+      });
+      return;
+    }
+
     // Step 2: Enhance with NanoBanana
-    if (clip.street_view_url && !clip.nanobanana_url) {
+    const sourceImageUrl = clip.place_photo_url || clip.street_view_url;
+    if (sourceImageUrl && !clip.nanobanana_url) {
       await updateClip(clipId, { status: 'enhancing' });
 
       console.log(`NanoBanana enhancing ${clip.poi_name}`);
       const result = await enhanceImage({
-        imageUrl: clip.street_view_url,
+        imageUrl: sourceImageUrl,
         direction,
         poiName: clip.poi_name,
         category: clip.poi_category,
@@ -89,16 +109,17 @@ async function processClip(clipId: string, direction: string) {
         console.log(`NanoBanana completed for ${clip.poi_name}`);
       } else {
         // Use original as fallback
-        clip = await updateClip(clipId, { nanobanana_url: clip.street_view_url });
+        clip = await updateClip(clipId, { nanobanana_url: sourceImageUrl });
         console.log(`NanoBanana fallback for ${clip.poi_name}: ${result.error}`);
       }
     }
 
-    // Step 3: Mark as completed (No Veo - focusing on image quality)
-    // Use the enhanced image as the final output
+    // Step 3: Mark as completed
+    // Use the best available image as the final output
+    const finalImageUrl = clip.nanobanana_url || clip.place_photo_url || clip.street_view_url;
     await updateClip(clipId, {
-      video_url: clip.nanobanana_url || clip.street_view_url,
-      video_thumbnail_url: clip.nanobanana_url || clip.street_view_url,
+      video_url: finalImageUrl,
+      video_thumbnail_url: finalImageUrl,
       status: 'completed',
     });
     console.log(`Clip completed: ${clip.poi_name}`);
@@ -176,6 +197,8 @@ export async function POST(request: NextRequest) {
       lng: poi.lng,
       relevanceReason: poi.relevanceReason,
       category: poi.category,
+      placeId: poi.placeId,
+      photoReference: poi.photoReference,
     }));
 
     // Create clips for each POI

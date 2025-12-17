@@ -78,6 +78,8 @@ export async function createClipsFromPOIs(
     poi_description: poi.description,
     relevance_reason: poi.relevanceReason,
     poi_category: poi.category || 'landmark',
+    place_id: poi.placeId,
+    photo_reference: poi.photoReference,
     status: 'pending' as const,
   }));
 

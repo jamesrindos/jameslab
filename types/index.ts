@@ -29,6 +29,9 @@ export interface Clip {
   poi_description?: string;
   relevance_reason?: string;
   poi_category?: string;
+  place_id?: string;
+  photo_reference?: string;
+  place_photo_url?: string;
   street_view_url?: string;
   nanobanana_url?: string;
   video_url?: string;
@@ -49,6 +52,8 @@ export interface POI {
   lng: number;
   relevanceReason: string;
   category?: POICategory | string;
+  placeId?: string;
+  photoReference?: string;
 }
 
 export interface GeminiPOIResponse {
