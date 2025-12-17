@@ -8,11 +8,15 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
 // Gemini 2.5 Flash Image is the "Nano Banana" model
 const NANOBANANA_MODEL = 'gemini-2.0-flash-exp-image-generation';
 
+// Default prompt for cinematic enhancement - conservative, preserves original
+export const DEFAULT_ENHANCEMENT_PROMPT = `Transform this image into cinematic high-quality footage while maintaining the exact original location, architecture, and spatial layout. Preserve all buildings, street signs, landmarks, and geographic features exactly as they appear. Enhance image quality: improve lighting for natural cinematic look, clean up visual noise and compression artifacts, sharpen details, enhance colors naturally without oversaturation. Remove temporary elements only: remove Google Street View watermarks, blur effects, camera rig artifacts, visible Street View car reflections. Maintain authentic street life: keep real pedestrians, vehicles, and urban activity as present in original. Adjust camera angle only if needed for better composition while keeping same viewpoint and perspective. Shot on cinema camera, photorealistic, natural lighting, clean professional aesthetic, --ar 16:9`;
+
 export interface NanoBananaEnhanceRequest {
   imageUrl: string;
   direction: string;
   poiName: string;
   category?: string;
+  customPrompt?: string; // For revisions - allows custom prompt override
   style?: 'cinematic' | 'documentary' | 'commercial' | 'artistic';
 }
 
@@ -38,15 +42,16 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ base64: string; m
 export async function enhanceImage(
   request: NanoBananaEnhanceRequest
 ): Promise<NanoBananaEnhanceResponse> {
-  const prompt = buildStagingPrompt(request.poiName, request.category, request.direction);
+  // Use custom prompt if provided (for revisions), otherwise use default
+  const prompt = request.customPrompt || DEFAULT_ENHANCEMENT_PROMPT;
 
   try {
-    console.log(`NanoBanana: Enhancing "${request.poiName}" (${request.category}) - subtle enhancement mode`);
+    console.log(`NanoBanana: Enhancing "${request.poiName}" - ${request.customPrompt ? 'custom prompt' : 'default prompt'}`);
 
     // Fetch the source image and convert to base64
     const { base64, mimeType } = await fetchImageAsBase64(request.imageUrl);
 
-    // Call Gemini Image Generation API for scene staging
+    // Call Gemini Image Generation API
     const response = await fetch(
       `${GEMINI_API_URL}/models/${NANOBANANA_MODEL}:generateContent?key=${NANOBANANA_API_KEY}`,
       {
@@ -72,7 +77,7 @@ export async function enhanceImage(
           ],
           generationConfig: {
             responseModalities: ['TEXT', 'IMAGE'],
-            temperature: 0.8,
+            temperature: 0.4, // Lower temperature for more consistent, faithful results
           },
         }),
       }
@@ -134,59 +139,19 @@ export async function enhanceImage(
   }
 }
 
-function buildStagingPrompt(poiName: string, category?: string, direction?: string): string {
-  // Get minimal, appropriate additions based on category
-  const peopleNote = getPeopleGuidance(category);
-
-  return `Enhance this street view photograph of "${poiName}" for professional stock footage use.
-
-CRITICAL REQUIREMENTS - PRESERVE THE ORIGINAL:
-- Keep the EXACT same composition, perspective, and framing
-- Maintain all existing architecture, buildings, and landmarks exactly as shown
-- Preserve the original scene layout - do NOT rearrange or add structures
-- This should look like an enhanced version of the same photo, not a different scene
-
-QUALITY ENHANCEMENTS TO APPLY:
-- Improve overall image sharpness and clarity
-- Apply subtle professional color grading (slightly richer, more cinematic tones)
-- Balance exposure and enhance dynamic range
-- Remove any Google watermarks, UI elements, or artifacts
-- Clean up any visual noise or compression artifacts
-
-${peopleNote}
-
-STYLE: ${direction || 'Modern cinematic establishing shot - present day'}
-
-OUTPUT REQUIREMENTS:
-- Photorealistic result (NOT illustrated or AI-looking)
-- Should appear as a high-quality professional photograph
-- Modern time period aesthetic
-- Subtle enhancement only - the original scene must be clearly recognizable
-
-Enhance this image while preserving its authenticity.`;
+// Revise an image with a custom prompt
+export async function reviseImage(
+  imageUrl: string,
+  customPrompt: string,
+  poiName: string
+): Promise<NanoBananaEnhanceResponse> {
+  return enhanceImage({
+    imageUrl,
+    direction: '',
+    poiName,
+    customPrompt,
+  });
 }
-
-function getPeopleGuidance(category?: string): string {
-  // Only suggest adding people for locations where an empty scene looks unnatural
-  switch (category) {
-    case 'beach':
-      return 'PEOPLE: If the beach appears empty and unnatural, you may add 2-3 distant beachgoers to make it feel lived-in. Keep them small and in the background.';
-
-    case 'street':
-    case 'shopping':
-      return 'PEOPLE: If the street appears unusually empty, you may add a few natural pedestrians at a distance. Keep the scene uncrowded and realistic.';
-
-    case 'restaurant':
-      return 'PEOPLE: If outdoor seating is visible and empty, you may add 1-2 seated patrons. Otherwise, leave as-is.';
-
-    case 'park':
-      return 'PEOPLE: Only add people if the park looks unnaturally empty. If adding, keep to 1-2 distant figures (jogger, dog walker).';
-
-    default:
-      return 'PEOPLE: Do NOT add people unless the scene looks unnaturally empty. When in doubt, preserve the original scene without additions.';
-  }
-}
-
 
 // Batch processing for multiple images
 export async function enhanceImages(

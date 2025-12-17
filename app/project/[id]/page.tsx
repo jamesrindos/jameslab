@@ -17,7 +17,9 @@ import {
   Play,
   Download,
   ArrowRight,
-  X
+  X,
+  RefreshCw,
+  Send
 } from 'lucide-react';
 import type { Project, Clip } from '@/types';
 import { cn } from '@/lib/utils';
@@ -333,8 +335,13 @@ function ClipCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
   );
 }
 
-function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void }) {
+function ClipDetailModal({ clip: initialClip, onClose }: { clip: Clip; onClose: () => void }) {
+  const [clip, setClip] = useState(initialClip);
   const [viewMode, setViewMode] = useState<'original' | 'enhanced'>('enhanced');
+  const [isRevising, setIsRevising] = useState(false);
+  const [showReviseInput, setShowReviseInput] = useState(false);
+  const [revisePrompt, setRevisePrompt] = useState('');
+  const [reviseError, setReviseError] = useState<string | null>(null);
 
   // Original can be either Place Photo or Street View
   const originalUrl = clip.place_photo_url || clip.street_view_url;
@@ -343,6 +350,40 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
 
   // Default to the best available view
   const currentView = viewMode === 'enhanced' && !hasEnhanced ? 'original' : viewMode;
+
+  const handleRevise = async () => {
+    if (!revisePrompt.trim()) {
+      setReviseError('Please enter a prompt');
+      return;
+    }
+
+    setIsRevising(true);
+    setReviseError(null);
+
+    try {
+      const response = await fetch(`/api/clips/${clip.id}/revise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: revisePrompt }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Revision failed');
+      }
+
+      // Update local clip state with new enhanced image
+      setClip(data.clip);
+      setShowReviseInput(false);
+      setRevisePrompt('');
+      setViewMode('enhanced');
+    } catch (error) {
+      setReviseError(error instanceof Error ? error.message : 'Revision failed');
+    } finally {
+      setIsRevising(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -388,7 +429,15 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
         </div>
 
         {/* Content */}
-        <div className="aspect-video bg-black">
+        <div className="aspect-video bg-black relative">
+          {isRevising && (
+            <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-10">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                <p className="text-sm text-muted-foreground">Revising image...</p>
+              </div>
+            </div>
+          )}
           {currentView === 'enhanced' && clip.nanobanana_url ? (
             <img
               src={clip.nanobanana_url}
@@ -408,8 +457,53 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
           )}
         </div>
 
+        {/* Revise Input */}
+        {showReviseInput && (
+          <div className="p-4 border-t border-border bg-muted/30">
+            <label className="block text-sm font-medium mb-2">Custom Enhancement Prompt</label>
+            <div className="flex gap-2">
+              <textarea
+                value={revisePrompt}
+                onChange={(e) => setRevisePrompt(e.target.value)}
+                placeholder="Describe how you want to enhance this image..."
+                className="flex-1 px-3 py-2 rounded-md border border-input bg-background text-sm resize-none"
+                rows={3}
+                disabled={isRevising}
+              />
+            </div>
+            {reviseError && (
+              <p className="text-destructive text-sm mt-2">{reviseError}</p>
+            )}
+            <div className="flex gap-2 mt-3">
+              <Button
+                onClick={handleRevise}
+                disabled={isRevising || !revisePrompt.trim()}
+                className="gap-2"
+              >
+                {isRevising ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                Apply Revision
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowReviseInput(false);
+                  setRevisePrompt('');
+                  setReviseError(null);
+                }}
+                disabled={isRevising}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Before/After comparison */}
-        {hasOriginal && hasEnhanced && (
+        {!showReviseInput && hasOriginal && hasEnhanced && (
           <div className="p-4 border-t border-border bg-muted/30">
             <div className="flex items-center justify-center gap-4 text-sm">
               <span className="text-muted-foreground">Compare:</span>
@@ -458,14 +552,33 @@ function ClipDetailModal({ clip, onClose }: { clip: Clip; onClose: () => void })
             </div>
           )}
 
-          {(clip.nanobanana_url || clip.place_photo_url || clip.street_view_url) && (
-            <div className="mt-4">
-              <a href={clip.nanobanana_url || clip.place_photo_url || clip.street_view_url} download className="inline-flex">
+          {/* Action Buttons */}
+          {clip.status === 'completed' && (
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a href="/gallery">
                 <Button className="gap-2">
-                  <Download className="w-4 h-4" />
-                  Download Image
+                  <ExternalLink className="w-4 h-4" />
+                  View in Gallery
                 </Button>
               </a>
+              {hasOriginal && !showReviseInput && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowReviseInput(true)}
+                  className="gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Revise Enhancement
+                </Button>
+              )}
+              {(clip.nanobanana_url || clip.place_photo_url || clip.street_view_url) && (
+                <a href={clip.nanobanana_url || clip.place_photo_url || clip.street_view_url} download>
+                  <Button variant="outline" className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Download
+                  </Button>
+                </a>
+              )}
             </div>
           )}
         </div>
