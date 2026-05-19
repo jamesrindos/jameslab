@@ -28,6 +28,22 @@ export default function NewProjectPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleLocationInputChange = (value: string) => {
+    setLocationInput(value);
+
+    if (
+      selectedLocation &&
+      value.trim() !== selectedLocation.formatted_address &&
+      value.trim() !== selectedLocation.name
+    ) {
+      setSelectedLocation(null);
+    }
+
+    if (error) {
+      setError(null);
+    }
+  };
+
   const handleLocationSelect = (location: SelectedLocation) => {
     setSelectedLocation(location);
     // Auto-fill project name with location if not already set
@@ -119,15 +135,19 @@ export default function NewProjectPage() {
               <Label htmlFor="location">Location</Label>
               <LocationAutocomplete
                 value={locationInput}
-                onChange={setLocationInput}
+                onChange={handleLocationInputChange}
                 onSelect={handleLocationSelect}
                 placeholder="Search for a city or town..."
               />
-              {selectedLocation && (
+              {selectedLocation ? (
                 <p className="text-xs text-muted-foreground mt-1">
                   Selected: {selectedLocation.formatted_address}
                 </p>
-              )}
+              ) : locationInput.trim() ? (
+                <p className="text-xs text-amber-600 mt-1">
+                  Pick a suggestion to confirm the exact location.
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">
