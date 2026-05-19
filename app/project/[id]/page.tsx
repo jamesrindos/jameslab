@@ -84,6 +84,22 @@ export default function ProjectPage() {
     }
   }, [projectId]);
 
+  const handleAddLocationInputChange = (value: string) => {
+    setAddLocationInput(value);
+
+    if (
+      selectedAddLocation &&
+      value.trim() !== selectedAddLocation.formatted_address &&
+      value.trim() !== selectedAddLocation.name
+    ) {
+      setSelectedAddLocation(null);
+    }
+
+    if (addError) {
+      setAddError(null);
+    }
+  };
+
   const handleAddClips = async () => {
     if (!selectedAddLocation) {
       setAddError('Please select a location');
@@ -387,18 +403,22 @@ export default function ProjectPage() {
                   <label className="block text-sm font-medium mb-2">Location</label>
                   <LocationAutocomplete
                     value={addLocationInput}
-                    onChange={setAddLocationInput}
+                    onChange={handleAddLocationInputChange}
                     onSelect={(location) => {
                       setSelectedAddLocation(location);
                       setAddError(null);
                     }}
                     placeholder="Search for a city or landmark..."
                   />
-                  {selectedAddLocation && (
+                  {selectedAddLocation ? (
                     <p className="text-xs text-muted-foreground mt-1">
                       Selected: {selectedAddLocation.formatted_address}
                     </p>
-                  )}
+                  ) : addLocationInput.trim() ? (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Pick a suggestion to confirm the exact location.
+                    </p>
+                  ) : null}
                 </div>
 
                 {addError && (
