@@ -11,6 +11,13 @@ export const useProjectStore = create<ProjectStore>((set) => ({
 
   setClips: (clips: Clip[]) => set({ clips }),
 
+  addClip: (clip: Clip) =>
+    set((state) => ({
+      clips: state.clips.some((existingClip) => existingClip.id === clip.id)
+        ? state.clips
+        : [...state.clips, clip],
+    })),
+
   updateClip: (clipId: string, updates: Partial<Clip>) =>
     set((state) => ({
       clips: state.clips.map((clip) =>

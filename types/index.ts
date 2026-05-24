@@ -114,6 +114,7 @@ export interface ProjectStore {
   error: string | null;
   setCurrentProject: (project: Project | null) => void;
   setClips: (clips: Clip[]) => void;
+  addClip: (clip: Clip) => void;
   updateClip: (clipId: string, updates: Partial<Clip>) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
