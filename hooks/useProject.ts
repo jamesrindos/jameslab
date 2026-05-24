@@ -12,6 +12,7 @@ export function useProject(projectId: string | undefined) {
     clips,
     setCurrentProject,
     setClips,
+    addClip,
     updateClip,
     setLoading,
     setError
@@ -70,7 +71,7 @@ export function useProject(projectId: string | undefined) {
     const clipsSubscription = subscribeToClips(
       projectId,
       (newClip) => {
-        setClips([...clips, newClip]);
+        addClip(newClip);
       },
       (updatedClip) => {
         updateClip(updatedClip.id, updatedClip);
@@ -81,7 +82,7 @@ export function useProject(projectId: string | undefined) {
       supabase.removeChannel(projectSubscription);
       supabase.removeChannel(clipsSubscription);
     };
-  }, [projectId, clips, setCurrentProject, setClips, updateClip]);
+  }, [projectId, addClip, setCurrentProject, updateClip]);
 
   return {
     project: currentProject,
