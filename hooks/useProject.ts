@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useProjectStore } from './useProjectStore';
 import { supabase, getProject, getClipsByProject, subscribeToProject, subscribeToClips } from '@/lib/db';
-import type { Project, Clip } from '@/types';
 
 export function useProject(projectId: string | undefined) {
   const {
