@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -158,7 +159,6 @@ export default function ProjectPage() {
   // Calculate progress stats
   const completedClips = clips.filter(c => c.status === 'completed').length;
   const failedClips = clips.filter(c => c.status === 'failed').length;
-  const processingClips = clips.filter(c => !['completed', 'failed', 'pending'].includes(c.status)).length;
   const progressPercent = clips.length > 0 ? Math.round((completedClips / clips.length) * 100) : 0;
 
   // Determine current pipeline stage based on clip statuses
@@ -201,10 +201,10 @@ export default function ProjectPage() {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <a href="/" className="hover:text-foreground transition-colors flex items-center gap-1">
+          <Link href="/" className="hover:text-foreground transition-colors flex items-center gap-1">
             <Home className="w-3 h-3" />
             Projects
-          </a>
+          </Link>
           <span>/</span>
           <span>{project.name || project.location_name}</span>
         </div>
@@ -692,7 +692,7 @@ function ClipDetailModal({ clip: initialClip, onClose }: { clip: Clip; onClose: 
                 <p className="text-muted-foreground text-sm mb-2">{clip.poi_description}</p>
               )}
               {clip.relevance_reason && (
-                <p className="text-xs text-muted-foreground italic">"{clip.relevance_reason}"</p>
+                <p className="text-xs text-muted-foreground italic">&ldquo;{clip.relevance_reason}&rdquo;</p>
               )}
             </div>
             <ClipStatusBadge status={clip.status} />
