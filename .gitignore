@@ -23,7 +23,7 @@
 # misc
 .DS_Store
 *.pem
-.tmp-pr-body*.md
+.tmp-pr*.md
 
 # debug
 npm-debug.log*

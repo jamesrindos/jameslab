@@ -146,10 +146,6 @@ export async function processProject(
       clips.map(c => getClip(c.id))
     );
 
-    const allCompleted = processedClips.every(
-      c => c?.status === 'completed'
-    );
-
     const allFailed = processedClips.every(
       c => c?.status === 'failed'
     );
