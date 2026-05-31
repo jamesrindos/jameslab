@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -454,10 +455,13 @@ function ClipCard({ clip, onClick }: { clip: Clip; onClick: () => void }) {
       <div className="aspect-video relative bg-muted">
         {previewUrl ? (
           <>
-            <img
-              src={previewUrl}
+            <Image
+              src={previewUrl!}
               alt={clip.poi_name}
-              className="w-full h-full object-cover"
+              fill
+              unoptimized
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover"
             />
             {clip.video_url && (
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -592,16 +596,22 @@ function ClipDetailModal({ clip: initialClip, onClose }: { clip: Clip; onClose: 
             </div>
           )}
           {currentView === 'enhanced' && clip.nanobanana_url ? (
-            <img
-              src={clip.nanobanana_url}
+            <Image
+              src={clip.nanobanana_url!}
               alt={`${clip.poi_name} - Enhanced`}
-              className="w-full h-full object-contain"
+              fill
+              unoptimized
+              sizes="100vw"
+              className="object-contain"
             />
           ) : originalUrl ? (
-            <img
-              src={originalUrl}
+            <Image
+              src={originalUrl!}
               alt={`${clip.poi_name} - Original`}
-              className="w-full h-full object-contain"
+              fill
+              unoptimized
+              sizes="100vw"
+              className="object-contain"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground">

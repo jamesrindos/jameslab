@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import type mapboxgl from 'mapbox-gl';
 import { Button } from '@/components/ui/button';
@@ -230,18 +231,24 @@ function GridView({
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {clips.map((clip) => (
+      {clips.map((clip) => {
+        const previewUrl = clip.video_thumbnail_url || clip.nanobanana_url || clip.street_view_url;
+
+        return (
         <div
           key={clip.id}
           onClick={() => onSelectClip(clip)}
           className="group cursor-pointer rounded-lg border border-border overflow-hidden bg-card hover:border-primary transition-colors"
         >
           <div className="aspect-video relative bg-muted">
-            {clip.video_thumbnail_url || clip.nanobanana_url || clip.street_view_url ? (
-              <img
-                src={clip.video_thumbnail_url || clip.nanobanana_url || clip.street_view_url}
+            {previewUrl ? (
+              <Image
+                src={previewUrl}
                 alt={clip.poi_name}
-                className="w-full h-full object-cover"
+                fill
+                unoptimized
+                sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                className="object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -261,7 +268,7 @@ function GridView({
             )}
           </div>
         </div>
-      ))}
+        )})}
     </div>
   );
 }
@@ -440,10 +447,13 @@ function ClipModal({
               className="w-full h-full"
             />
           ) : clip.nanobanana_url || clip.street_view_url ? (
-            <img
-              src={clip.nanobanana_url || clip.street_view_url}
+            <Image
+              src={(clip.nanobanana_url || clip.street_view_url)!}
               alt={clip.poi_name}
-              className="w-full h-full object-contain"
+              fill
+              unoptimized
+              sizes="100vw"
+              className="object-contain"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground">
