@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -182,10 +183,13 @@ function ProjectCard({ project }: { project: ProjectWithClips }) {
         <div className="aspect-video relative bg-muted overflow-hidden">
           {currentImage ? (
             <>
-              <img
-                src={currentImage}
+              <Image
+                src={currentImage!}
                 alt={project.location_name}
-                className="w-full h-full object-cover transition-opacity duration-500"
+                fill
+                unoptimized
+                sizes="(max-width: 768px) 100vw, 33vw"
+                className="object-cover transition-opacity duration-500"
               />
               {/* Image counter */}
               {clipsWithImages.length > 1 && (

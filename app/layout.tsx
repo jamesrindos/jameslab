@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from 'next/link';
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -18,7 +19,7 @@ export default function RootLayout({
         <Providers>
           <nav className="border-b border-border">
             <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-              <a href="/" className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                   <svg
                     className="w-5 h-5 text-primary-foreground"
@@ -35,26 +36,26 @@ export default function RootLayout({
                   </svg>
                 </div>
                 <span className="font-semibold text-lg">HyperLocal</span>
-              </a>
+              </Link>
               <div className="flex items-center gap-4">
-                <a
+                <Link
                   href="/"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Projects
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/gallery"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Gallery
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/new"
                   className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                 >
                   + New
-                </a>
+                </Link>
               </div>
             </div>
           </nav>

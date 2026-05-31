@@ -107,8 +107,7 @@ function getOptimalCameraSettings(category?: string): { heading: number; pitch: 
 // Find Street View coverage near a location
 async function findNearbyStreetView(
   lat: number,
-  lng: number,
-  radiusMeters = 100
+  lng: number
 ): Promise<{ url: string; metadata: StreetViewMetadata } | null> {
   // Try a few nearby points
   const offsets = [

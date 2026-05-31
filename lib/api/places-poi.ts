@@ -299,7 +299,7 @@ export async function discoverRealPOIs(
   // Get details for selected places and build final POIs
   const pois: RealPOI[] = [];
 
-  for (const { place, searchType } of selectedPlaces) {
+  for (const { place } of selectedPlaces) {
     try {
       const details = await getPlaceDetails(place.place_id);
       const category = categorizePlace(place.types);
